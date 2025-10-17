@@ -1,0 +1,17 @@
+{
+  "name": "ai-model-change-clothing",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI fashion generator web experience",
+  "scripts": {
+    "web": "npm --prefix web-ui run dev",
+    "web:build": "npm --prefix web-ui run build",
+    "web:lint": "npm --prefix web-ui run lint"
+  },
+  "keywords": [
+    "fashion",
+    "ai",
+    "nextjs"
+  ],
+  "license": "MIT"
+}
