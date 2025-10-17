@@ -83,10 +83,10 @@ export const IMAGE_GENERATION_BASE64_PROMPT = `将上传的图片换成下面的
 // 小红书标题生成提示词
 export const XIAOHONGSHU_TITLE_PROMPT = `你是一位专业的小红书内容创作专家，擅长创作吸引眼球的爆款标题。
 
-请根据以下服装描述和生成的图片数量，创作一个符合小红书风格的爆款标题。
+请根据以下服装描述，创作一个符合小红书风格的爆款标题。
 
 【标题公式】
-主标题：〔夸张数量词+{imageCount}+形容词+单品〕✖️〔数字符号〕！！〔情绪句/疑问句〕
+主标题：〔夸张数量词+形容词+单品〕✖️〔数字符号〕！！〔情绪句/疑问句〕
 副标题：#人设标签 #场景标签 #风格标签 #功能标签 #流量标签
 
 【创作要求】
@@ -115,5 +115,4 @@ export const XIAOHONGSHU_TITLE_PROMPT = `你是一位专业的小红书内容创
 ---
 
 现在请根据以下信息生成标题：
-服装描述：{clothingDescription}
-图片数量：{imageCount}张`;
+服装描述：{clothingDescription}`;
