@@ -41,7 +41,7 @@ export const IMAGE_GENERATION_NEW_BG_GESTURE_PROMPT = `请根据以下描述，�
 5. 保持专业的摄影质量`;
 
 // Gemini生成Base64图片的提示词
-export const IMAGE_GENERATION_BASE64_PROMPT = `请根据以下服装描述，在提供的模特图片基础上，生成一张穿着这些服装的图片。
+export const IMAGE_GENERATION_BASE64_PROMPT = `请根据以下服装描述，在提供的模特图片基础上，背景安装提供的模特图片的背景，生成一张穿着这些服装的图片。
 
 要求：
 1. 保持模特的姿态和表情

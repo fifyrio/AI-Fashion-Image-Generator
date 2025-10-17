@@ -554,8 +554,8 @@ export default function Home() {
                     </div>
                     <div className="absolute top-2 right-2">
                       <a
-                        href={image.imageUrl}
-                        download={image.imageKey}
+                        href={`/api/download?key=${encodeURIComponent(image.imageKey)}`}
+                        download={image.imageKey.split('/').pop() ?? image.imageKey}
                         className="bg-white hover:bg-green-50 text-green-600 p-2 rounded-full shadow-lg transition-colors"
                         title="Download image"
                       >
