@@ -9,12 +9,12 @@ async function streamToBuffer(stream: Readable | ReadableStream<Uint8Array> | Bl
     return Buffer.alloc(0);
   }
 
-  if (typeof (stream as any).arrayBuffer === 'function') {
+  if (typeof (stream as Blob).arrayBuffer === 'function') {
     const arrayBuffer = await (stream as Blob).arrayBuffer();
     return Buffer.from(arrayBuffer);
   }
 
-  if (typeof (stream as any).getReader === 'function') {
+  if (typeof (stream as ReadableStream<Uint8Array>).getReader === 'function') {
     const reader = (stream as ReadableStream<Uint8Array>).getReader();
     const chunks: Uint8Array[] = [];
     let done = false;
@@ -72,7 +72,7 @@ export async function GET(
       response.ContentType ||
       `image/${path.extname(target.Key).replace('.', '') || 'png'}`;
 
-    return new NextResponse(buffer, {
+    return new NextResponse(buffer as BodyInit, {
       headers: {
         'Content-Type': contentType,
         'Cache-Control': 'public, max-age=31536000',

@@ -1,6 +1,14 @@
 import type { NextConfig } from "next";
 
-const remotePatterns: NextConfig['images']['remotePatterns'] = [];
+type RemotePattern = {
+  protocol?: 'http' | 'https';
+  hostname: string;
+  port?: string;
+  pathname?: string;
+  search?: string;
+};
+
+const remotePatterns: RemotePattern[] = [];
 
 const r2BaseUrl = process.env.R2_PUBLIC_BASE_URL ?? 'https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev';
 

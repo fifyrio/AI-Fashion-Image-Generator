@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { openRouterConfig, AI_MODELS } from './config';
-import { MessageContent, ImageAnalysisResult } from './types';
+import { ImageAnalysisResult } from './types';
 import { GPT_ANALYZE_CLOTHING_PROMPT, XIAOHONGSHU_TITLE_PROMPT } from './prompts';
 
 // AI服务类
@@ -15,11 +15,11 @@ export class AIService {
     }
 
     // 调用GPT模型分析图片
-    async analyzeWithGPT(imageSource: string, filename: string): Promise<string> {
+    async analyzeWithGPT(imageSource: string): Promise<string> {
         console.log('📡 正在调用GPT API...');
         console.log('🔧 模型:', AI_MODELS.GPT);
 
-        const content: MessageContent[] = [
+        const content: OpenAI.Chat.ChatCompletionContentPart[] = [
             {
                 type: "text",
                 text: GPT_ANALYZE_CLOTHING_PROMPT
@@ -50,8 +50,9 @@ export class AIService {
             }
 
             throw new Error('GPT API响应格式错误或内容为空');
-        } catch (error: any) {
-            console.error('🚨 GPT API调用失败:', error.message);
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error('🚨 GPT API调用失败:', errorMessage);
             throw error;
         }
     }
@@ -61,7 +62,7 @@ export class AIService {
         const startTime = new Date();
 
         try {
-            const analysis = await this.analyzeWithGPT(imageSource, filename);
+            const analysis = await this.analyzeWithGPT(imageSource);
 
             return {
                 filename,
@@ -70,14 +71,15 @@ export class AIService {
                 timestamp: startTime,
                 success: true
             };
-        } catch (error: any) {
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
             return {
                 filename,
                 modelName: 'OpenAI GPT-5-mini',
                 analysis: '',
                 timestamp: startTime,
                 success: false,
-                error: error.message
+                error: errorMessage
             };
         }
     }
@@ -116,8 +118,9 @@ export class AIService {
             }
 
             throw new Error('标题生成失败：API响应格式错误或内容为空');
-        } catch (error: any) {
-            console.error('🚨 标题生成失败:', error.message);
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error('🚨 标题生成失败:', errorMessage);
             throw error;
         }
     }

@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { openRouterConfig, AI_MODELS } from './config';
-import { MessageContent, ImageGenerationResult, ImageResult } from './types';
+import { ImageGenerationResult, ImageResult } from './types';
 import { IMAGE_GENERATION_BASE64_PROMPT } from './prompts';
 
 // 图片生成服务类
@@ -16,7 +16,7 @@ export class ImageGenerator {
 
     // 调用Gemini模型生成图片（Base64模式）
     async generateWithGeminiBase64(clothing: string, imageUrl: string): Promise<string> {
-        const content: MessageContent[] = [
+        const content: OpenAI.Chat.ChatCompletionContentPart[] = [
             {
                 type: "text",
                 text: `${IMAGE_GENERATION_BASE64_PROMPT}${clothing}`
@@ -63,12 +63,13 @@ export class ImageGenerator {
                 timestamp: startTime,
                 result: result
             };
-        } catch (error: any) {
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
             return {
                 prompt: clothing,
                 imageUrl,
                 success: false,
-                error: error.message,
+                error: errorMessage,
                 timestamp: startTime
             };
         }
@@ -77,9 +78,9 @@ export class ImageGenerator {
     /**
      * 处理 OpenRouter API 响应，提取图片数据
      */
-    private processOpenRouterResponse(completion: any): string {
+    private processOpenRouterResponse(completion: OpenAI.Chat.Completions.ChatCompletion): string {
         const choice = completion.choices?.[0];
-        const message = choice?.message as any;
+        const message = choice?.message as OpenAI.Chat.Completions.ChatCompletionMessage & { images?: ImageResult[] };
 
         console.log("🔍 处理 OpenRouter API 响应", message);
 

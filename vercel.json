@@ -1,7 +1,4 @@
 {
-  "buildCommand": "cd web-ui && npm install && npm run build",
-  "outputDirectory": "web-ui/.next",
-  "installCommand": "cd web-ui && npm install",
   "framework": "nextjs",
   "regions": ["hkg1"],
   "env": {
@@ -16,7 +13,7 @@
     "R2_MODEL_BASE_URL": "@r2_model_base_url"
   },
   "functions": {
-    "web-ui/app/api/**/*.ts": {
+    "app/api/**/*.ts": {
       "runtime": "nodejs20.x",
       "maxDuration": 60
     }

@@ -2,7 +2,8 @@
 
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
-import type { GeneratedImageRecord, UploadedReference } from '@/lib/types';
+import type { UploadedReference } from '@/lib/types';
+import type { GeneratedImageSummary } from '@/lib/pipeline';
 
 interface CharacterOption {
   id: string;
@@ -35,8 +36,15 @@ type UploadedFileInfo = UploadedReference & {
   contentType: string;
 };
 
-type GeneratedImage = Omit<GeneratedImageRecord, 'analysis'> & {
+type GeneratedImage = {
+  imageUrl: string;
+  imageKey: string;
+  metadataUrl: string;
+  xiaohongshuTitle?: string;
   analysis?: string;
+  createdAt: string;
+  source?: UploadedReference;
+  character: string;
 };
 
 export default function Home() {
@@ -192,7 +200,7 @@ export default function Home() {
       const data = await response.json();
 
       if (response.ok && Array.isArray(data.images)) {
-        const mapped: GeneratedImage[] = data.images.map((item: any) => ({
+        const mapped: GeneratedImage[] = data.images.map((item: GeneratedImageSummary) => ({
           imageUrl: item.path,
           imageKey: item.name,
           metadataUrl: item.metadataUrl ?? '',

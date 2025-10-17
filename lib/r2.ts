@@ -79,11 +79,6 @@ export async function uploadJsonToR2(key: string, data: Record<string, unknown>)
   });
 }
 
-interface ListOptions {
-  prefix?: string;
-  maxKeys?: number;
-}
-
 /**
  * Lists objects stored in the configured bucket.
  */
