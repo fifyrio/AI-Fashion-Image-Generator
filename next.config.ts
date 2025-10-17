@@ -32,6 +32,13 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns,
   },
+  // API route configuration
+  experimental: {
+    // Increase timeout for API routes (Vercel Pro plan needed for >60s)
+    serverActions: {
+      bodySizeLimit: '10mb',
+    },
+  },
 };
 
 export default nextConfig;
