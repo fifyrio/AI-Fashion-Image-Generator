@@ -1,17 +1,6 @@
 {
   "framework": "nextjs",
   "regions": ["hkg1"],
-  "env": {
-    "OPENROUTER_API_KEY": "@openrouter_api_key",
-    "SITE_URL": "@site_url",
-    "SITE_NAME": "@site_name",
-    "R2_ACCOUNT_ID": "@r2_account_id",
-    "R2_ACCESS_KEY_ID": "@r2_access_key_id",
-    "R2_SECRET_ACCESS_KEY": "@r2_secret_access_key",
-    "R2_BUCKET_NAME": "@r2_bucket_name",
-    "R2_PUBLIC_BASE_URL": "@r2_public_base_url",
-    "R2_MODEL_BASE_URL": "@r2_model_base_url"
-  },
   "functions": {
     "app/api/**/*.ts": {
       "runtime": "nodejs20.x",
