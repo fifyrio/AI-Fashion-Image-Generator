@@ -23,18 +23,20 @@ const CHARACTER_OPTIONS: CharacterOption[] = [
   },
 ];
 
-interface FilePreview {
+interface FileWithStatus {
   file: File;
   preview: string;
+  status: 'pending' | 'uploading' | 'uploaded' | 'error';
+  progress: number;
+  uploadedInfo?: UploadedReference & {
+    key: string;
+    url: string;
+    filename: string;
+    size: number;
+    contentType: string;
+  };
+  error?: string;
 }
-
-type UploadedFileInfo = UploadedReference & {
-  key: string;
-  url: string;
-  filename: string;
-  size: number;
-  contentType: string;
-};
 
 type GeneratedImage = {
   imageUrl: string;
@@ -48,47 +50,119 @@ type GeneratedImage = {
 };
 
 export default function Home() {
-  const [selectedFiles, setSelectedFiles] = useState<FilePreview[]>([]);
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFileInfo[]>([]);
+  const [filesWithStatus, setFilesWithStatus] = useState<FileWithStatus[]>([]);
   const [character, setCharacter] = useState<string>(CHARACTER_OPTIONS[0].id);
-  const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState<string>('');
   const [generateStatus, setGenerateStatus] = useState<string>('');
   const [isDragging, setIsDragging] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
 
-  const processFiles = (files: FileList | null) => {
-    if (files && files.length > 0) {
-      setUploadStatus('');
-      setUploadedFiles([]);
+  // Auto-upload when files are selected
+  const uploadFile = async (fileWithStatus: FileWithStatus, index: number) => {
+    // Update status to uploading
+    setFilesWithStatus(prev => prev.map((f, i) =>
+      i === index ? { ...f, status: 'uploading' as const, progress: 0 } : f
+    ));
 
-      const filesArray = Array.from(files);
-      const promises = filesArray.map((file) => {
-        return new Promise<FilePreview>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            resolve({
-              file,
-              preview: reader.result as string,
-            });
-          };
-          reader.onerror = () => {
-            reject(new Error(`Failed to read file: ${file.name}`));
-          };
-          reader.readAsDataURL(file);
-        });
+    try {
+      const formData = new FormData();
+      formData.append('files', fileWithStatus.file);
+
+      const xhr = new XMLHttpRequest();
+
+      // Track upload progress
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          const percentComplete = (e.loaded / e.total) * 100;
+          setFilesWithStatus(prev => prev.map((f, i) =>
+            i === index ? { ...f, progress: percentComplete } : f
+          ));
+        }
       });
 
-      // Wait for all files to be processed
-      Promise.all(promises)
-        .then((newFilePreviews) => {
-          setSelectedFiles((prev) => [...prev, ...newFilePreviews]);
-        })
-        .catch((error) => {
-          console.error('Error processing files:', error);
-          setUploadStatus('Error processing some files');
-        });
+      // Handle completion
+      xhr.addEventListener('load', () => {
+        if (xhr.status === 200) {
+          const data = JSON.parse(xhr.responseText);
+          if (data.uploaded && data.uploaded.length > 0) {
+            setFilesWithStatus(prev => prev.map((f, i) =>
+              i === index ? {
+                ...f,
+                status: 'uploaded' as const,
+                progress: 100,
+                uploadedInfo: data.uploaded[0]
+              } : f
+            ));
+          }
+        } else {
+          setFilesWithStatus(prev => prev.map((f, i) =>
+            i === index ? {
+              ...f,
+              status: 'error' as const,
+              error: 'Upload failed'
+            } : f
+          ));
+        }
+      });
+
+      // Handle errors
+      xhr.addEventListener('error', () => {
+        setFilesWithStatus(prev => prev.map((f, i) =>
+          i === index ? {
+            ...f,
+            status: 'error' as const,
+            error: 'Network error'
+          } : f
+        ));
+      });
+
+      xhr.open('POST', '/api/upload');
+      xhr.send(formData);
+    } catch (error) {
+      setFilesWithStatus(prev => prev.map((f, i) =>
+        i === index ? {
+          ...f,
+          status: 'error' as const,
+          error: String(error)
+        } : f
+      ));
+    }
+  };
+
+  const processFiles = async (files: FileList | null) => {
+    if (files && files.length > 0) {
+      const filesArray = Array.from(files);
+      const newFiles: FileWithStatus[] = [];
+
+      // Read all files and create preview URLs
+      for (const file of filesArray) {
+        try {
+          const preview = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+
+          newFiles.push({
+            file,
+            preview,
+            status: 'pending',
+            progress: 0,
+          });
+        } catch (error) {
+          console.error('Error reading file:', error);
+        }
+      }
+
+      // Add to state
+      setFilesWithStatus(prev => [...prev, ...newFiles]);
+
+      // Auto-upload each file
+      const startIndex = filesWithStatus.length;
+      newFiles.forEach((fileWithStatus, i) => {
+        uploadFile(fileWithStatus, startIndex + i);
+      });
     }
   };
 
@@ -123,75 +197,13 @@ export default function Home() {
   };
 
   const removeFile = (index: number) => {
-    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
-    setUploadedFiles([]);
-    setUploadStatus('');
-    setGenerateStatus('');
+    setFilesWithStatus(prev => prev.filter((_, i) => i !== index));
   };
 
   const clearAllFiles = () => {
-    setSelectedFiles([]);
-    setUploadedFiles([]);
-    setUploadStatus('');
+    setFilesWithStatus([]);
     setGenerateStatus('');
     setGeneratedImages([]);
-  };
-
-  const handleUpload = async () => {
-    if (selectedFiles.length === 0) {
-      setUploadStatus('Please select at least one file first');
-      return;
-    }
-
-    setUploading(true);
-    setUploadStatus('Uploading...');
-
-    try {
-      const formData = new FormData();
-      selectedFiles.forEach((filePreview) => {
-        formData.append('files', filePreview.file);
-      });
-
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        const uploadedList = Array.isArray(data.uploaded) ? data.uploaded : [];
-        setUploadedFiles(uploadedList);
-
-        const lines: string[] = [
-          `Uploaded ${data.uploadedCount} of ${data.totalCount} file(s) to Cloudflare R2.`,
-        ];
-
-        if (uploadedList.length > 0) {
-          lines.push(
-            '',
-            ...uploadedList.map((item: UploadedFileInfo) => `• ${item.filename} → ${item.url}`)
-          );
-        }
-
-        if (data.errors && data.errors.length > 0) {
-          lines.push(
-            '',
-            'Errors:',
-            ...data.errors.map((e: { filename: string; error: string }) => `- ${e.filename}: ${e.error}`)
-          );
-        }
-
-        setUploadStatus(lines.join('\n'));
-        setGenerateStatus('');
-      } else {
-        setUploadStatus(`Upload failed: ${data.error ?? 'Unknown error'}`);
-      }
-    } catch (error) {
-      setUploadStatus(`Upload error: ${error}`);
-    } finally {
-      setUploading(false);
-    }
   };
 
   const fetchGeneratedImages = async () => {
@@ -223,8 +235,10 @@ export default function Home() {
   }, []);
 
   const handleGenerate = async () => {
+    const uploadedFiles = filesWithStatus.filter(f => f.status === 'uploaded' && f.uploadedInfo);
+
     if (uploadedFiles.length === 0) {
-      setGenerateStatus('Please upload your reference images to Cloudflare R2 first.');
+      setGenerateStatus('Please wait for images to finish uploading to R2 first.');
       return;
     }
 
@@ -240,7 +254,7 @@ export default function Home() {
         },
         body: JSON.stringify({
           character,
-          uploads: uploadedFiles,
+          uploads: uploadedFiles.map(f => f.uploadedInfo),
         }),
       });
 
@@ -276,6 +290,9 @@ export default function Home() {
     }
   };
 
+  const uploadedCount = filesWithStatus.filter(f => f.status === 'uploaded').length;
+  const uploadingCount = filesWithStatus.filter(f => f.status === 'uploading').length;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-8">
       <div className="max-w-6xl mx-auto">
@@ -288,18 +305,22 @@ export default function Home() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-semibold text-gray-700">
-                1. Upload Images ({selectedFiles.length} selected)
+                1. Select Images ({filesWithStatus.length} files, {uploadedCount} uploaded)
               </h2>
-              {selectedFiles.length > 0 && (
+              {filesWithStatus.length > 0 && (
                 <button
                   onClick={clearAllFiles}
-                  className="text-red-600 hover:text-red-700 font-medium text-sm"
+                  className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white font-medium px-4 py-2 rounded-lg transition-colors"
                 >
-                  Clear All
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  CLEAR QUEUE
                 </button>
               )}
             </div>
 
+            {/* Upload Area */}
             <div
               className="flex flex-col items-center justify-center w-full"
               onDragEnter={handleDragEnter}
@@ -311,39 +332,36 @@ export default function Home() {
                 htmlFor="file-upload"
                 className={`flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer transition-all ${
                   isDragging
-                    ? 'border-purple-500 bg-purple-50 scale-105'
+                    ? 'border-blue-500 bg-blue-50 scale-105'
                     : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
                 }`}
               >
                 <div className="flex flex-col items-center justify-center pt-5 pb-6 pointer-events-none">
                   <svg
-                    className={`w-12 h-12 mb-4 transition-colors ${
-                      isDragging ? 'text-purple-500' : 'text-gray-400'
+                    className={`w-16 h-16 mb-4 transition-colors ${
+                      isDragging ? 'text-blue-500' : 'text-gray-400'
                     }`}
-                    aria-hidden="true"
-                    xmlns="http://www.w3.org/2000/svg"
                     fill="none"
-                    viewBox="0 0 20 16"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
                   >
                     <path
-                      stroke="currentColor"
                       strokeLinecap="round"
                       strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"
+                      strokeWidth={2}
+                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
                     />
                   </svg>
-                  <p className={`mb-2 text-sm ${isDragging ? 'text-purple-600 font-semibold' : 'text-gray-500'}`}>
-                    {isDragging ? (
-                      'Drop files here'
-                    ) : (
-                      <>
-                        <span className="font-semibold">Click to upload</span> or drag and drop
-                      </>
-                    )}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    PNG, JPG, GIF (MAX. 10MB each) - Multiple files supported
+                  <button className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-8 rounded-lg mb-4 pointer-events-auto">
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      UPLOAD FILES
+                    </div>
+                  </button>
+                  <p className="text-sm text-gray-500">
+                    JPEG, PNG, GIF, PDF supported
                   </p>
                 </div>
                 <input
@@ -357,70 +375,114 @@ export default function Home() {
               </label>
             </div>
 
-            {/* Preview Grid */}
-            {selectedFiles.length > 0 && (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
-                {selectedFiles.map((filePreview, index) => {
-                  const uploadedMatch = uploadedFiles.find(
-                    (file) => file.filename === filePreview.file.name
-                  );
-                  const previewSrc = uploadedMatch?.url || filePreview.preview;
-
-                  return (
-                    <div
-                      key={index}
-                      className="relative group border-2 border-gray-200 rounded-lg overflow-hidden hover:border-purple-400 transition-colors"
+            {/* File Grid */}
+            {filesWithStatus.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-6">
+                {filesWithStatus.map((fileWithStatus, index) => (
+                  <div
+                    key={index}
+                    className="relative border-2 border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow"
+                  >
+                    {/* Remove button */}
+                    <button
+                      onClick={() => removeFile(index)}
+                      className="absolute top-2 right-2 z-10 bg-gray-900 bg-opacity-75 hover:bg-opacity-100 text-white rounded-full p-1.5 transition-all"
                     >
-                      <div className="relative h-32 w-full">
-                        <Image
-                          src={previewSrc}
-                          alt={filePreview.file.name}
-                          fill
-                          className="object-cover"
-                          sizes="(min-width: 1024px) 25vw, (min-width: 768px) 33vw, 50vw"
-                          unoptimized
-                        />
-                      </div>
-                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center">
-                      <button
-                        onClick={() => removeFile(index)}
-                        className="opacity-0 group-hover:opacity-100 bg-red-600 text-white px-3 py-1 rounded-md text-sm font-medium transition-opacity"
-                      >
-                        Remove
-                      </button>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+
+                    {/* Image preview */}
+                    <div className="relative h-40 w-full bg-gray-100">
+                      <Image
+                        src={fileWithStatus.uploadedInfo?.url || fileWithStatus.preview}
+                        alt={fileWithStatus.file.name}
+                        fill
+                        className="object-cover"
+                        sizes="(min-width: 1024px) 25vw, (min-width: 768px) 33vw, 50vw"
+                        unoptimized
+                      />
+
+                      {/* Upload overlay */}
+                      {fileWithStatus.status === 'uploading' && (
+                        <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center">
+                          <svg
+                            className="w-12 h-12 text-white mb-3 animate-bounce"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                            />
+                          </svg>
+                          <p className="text-white font-semibold text-lg">UPLOADING</p>
+                          <p className="text-white text-sm mt-1">Generate Videos</p>
+                          <div className="w-4/5 bg-gray-300 rounded-full h-2 mt-3">
+                            <div
+                              className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${fileWithStatus.progress}%` }}
+                            />
+                          </div>
+                          <p className="text-blue-300 text-xs mt-1">
+                            {Math.round(fileWithStatus.progress)}% of {(fileWithStatus.file.size / 1024 / 1024).toFixed(1)} MB
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Error overlay */}
+                      {fileWithStatus.status === 'error' && (
+                        <div className="absolute inset-0 bg-red-500 bg-opacity-90 flex flex-col items-center justify-center">
+                          <svg className="w-12 h-12 text-white mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <p className="text-white font-semibold">FAILED</p>
+                          <p className="text-white text-xs mt-1 px-2 text-center">{fileWithStatus.error}</p>
+                        </div>
+                      )}
+
+                      {/* Success check */}
+                      {fileWithStatus.status === 'uploaded' && (
+                        <div className="absolute top-2 left-2 bg-green-500 rounded-full p-1">
+                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                      )}
                     </div>
-                    <div className="p-2 bg-gray-50">
-                      <p className="text-xs text-gray-600 truncate">
-                        {filePreview.file.name}
+
+                    {/* File info */}
+                    <div className="p-3 bg-gray-50">
+                      <p className="text-xs font-medium text-gray-700 truncate">
+                        {fileWithStatus.file.name}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {(fileWithStatus.file.size / 1024 / 1024).toFixed(2)} MB
                       </p>
                     </div>
-                    </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             )}
 
-            <button
-              onClick={handleUpload}
-              disabled={selectedFiles.length === 0 || uploading}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
-            >
-              {uploading
-                ? 'Uploading...'
-                : `Upload ${selectedFiles.length} file(s) to Cloudflare R2`}
-            </button>
-
-            {uploadStatus && (
-              <div
-                className={`p-4 rounded-lg whitespace-pre-line ${
-                  uploadStatus.toLowerCase().startsWith('uploaded')
-                    ? 'bg-green-100 text-green-800'
-                    : uploadStatus.toLowerCase().includes('error')
-                    ? 'bg-red-100 text-red-800'
-                    : 'bg-blue-100 text-blue-800'
-                }`}
-              >
-                {uploadStatus}
+            {/* Upload status bar */}
+            {uploadingCount > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                    <span className="text-blue-700 font-medium">
+                      Uploading {uploadingCount} file(s) to Cloudflare R2...
+                    </span>
+                  </div>
+                  <span className="text-blue-600 text-sm">
+                    {uploadedCount} / {filesWithStatus.length} completed
+                  </span>
+                </div>
               </div>
             )}
           </div>
@@ -485,10 +547,10 @@ export default function Home() {
 
             <button
               onClick={handleGenerate}
-              disabled={uploadedFiles.length === 0 || generating}
+              disabled={uploadedCount === 0 || generating}
               className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100"
             >
-              {generating ? 'Generating... Please wait' : 'Generate Images'}
+              {generating ? 'Generating... Please wait' : `Generate Images (${uploadedCount} ready)`}
             </button>
 
             {generateStatus && (
@@ -592,11 +654,11 @@ export default function Home() {
           <div className="bg-blue-50 p-4 rounded-lg">
             <h3 className="font-semibold text-blue-900 mb-2">How it works:</h3>
             <ol className="list-decimal list-inside space-y-1 text-sm text-blue-800">
-              <li>Upload one or more fashion images (files are stored in Cloudflare R2)</li>
+              <li>Select fashion images - they automatically upload to Cloudflare R2</li>
               <li>Select a character model (lin, Qiao, lin_home_1, or ayi)</li>
-              <li>Click Generate to run the TypeScript pipeline directly (no CLI command needed)</li>
-              <li>The service analyzes your reference images via their R2 URLs and builds prompts</li>
-              <li>Generated images are saved back to R2 and appear below with download buttons</li>
+              <li>Click Generate to create AI-powered fashion images</li>
+              <li>The service analyzes your reference images and generates new outfits</li>
+              <li>Download generated images with Xiaohongshu-ready titles</li>
             </ol>
           </div>
         </div>
