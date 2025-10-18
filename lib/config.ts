@@ -8,7 +8,7 @@ export const openRouterConfig = {
 
 // AI模型配置
 export const AI_MODELS = {
-    GPT: "openai/gpt-5-mini",
+    GPT: "openai/gpt-4o-mini",  // 修正：gpt-4o-mini 是正确的模型名称
     GEMINI: "google/gemini-2.5-flash-image"
 };
 

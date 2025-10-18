@@ -43,16 +43,30 @@ export class AIService {
                 }
             });
 
+            console.log('📦 API完整响应:', JSON.stringify(completion, null, 2));
+
             if (completion.choices?.[0]?.message?.content) {
                 const responseContent = completion.choices[0].message.content;
-                console.log('✅ 响应内容长度:', responseContent);
+                console.log('✅ 响应内容长度:', responseContent.length);
+                console.log('📝 响应内容预览:', responseContent.substring(0, 200));
                 return responseContent;
             }
 
+            console.error('❌ 响应结构异常:', {
+                hasChoices: !!completion.choices,
+                choicesLength: completion.choices?.length,
+                firstChoice: completion.choices?.[0],
+            });
             throw new Error('GPT API响应格式错误或内容为空');
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             console.error('🚨 GPT API调用失败:', errorMessage);
+
+            // 打印更详细的错误信息
+            if (error instanceof Error && 'response' in error) {
+                console.error('🔍 错误详情:', error);
+            }
+
             throw error;
         }
     }
@@ -66,7 +80,7 @@ export class AIService {
 
             return {
                 filename,
-                modelName: 'OpenAI GPT-5-mini',
+                modelName: AI_MODELS.GPT,
                 analysis,
                 timestamp: startTime,
                 success: true
@@ -75,7 +89,7 @@ export class AIService {
             const errorMessage = error instanceof Error ? error.message : String(error);
             return {
                 filename,
-                modelName: 'OpenAI GPT-5-mini',
+                modelName: AI_MODELS.GPT,
                 analysis: '',
                 timestamp: startTime,
                 success: false,
