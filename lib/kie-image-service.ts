@@ -78,7 +78,7 @@ export class KIEImageService {
      * @param imageUrl 参考图片URL
      * @returns 任务ID
      */
-    async createTask(prompt: string, imageUrl: string): Promise<string> {
+    async createTask(prompt: string, imageUrl: string, imageRatio = '9:16'): Promise<string> {
         const response = await fetch(`${this.baseUrl}/createTask`, {
             method: 'POST',
             headers: {
@@ -91,7 +91,8 @@ export class KIEImageService {
                 input: {
                     prompt: prompt,
                     image_urls: [imageUrl],
-                    output_format: 'png'
+                    output_format: 'png',
+                    image_size: imageRatio
                 }
             })
         });
