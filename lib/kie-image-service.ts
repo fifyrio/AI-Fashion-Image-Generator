@@ -1,5 +1,6 @@
 import { ImageGenerationResult } from './types';
 import { saveKIETaskMetadata } from './r2';
+import { IMAGE_GENERATION_BASE64_PROMPT } from './prompts';
 
 // KIE API 响应类型
 interface KIECreateTaskResponse {
@@ -194,7 +195,8 @@ export class KIEImageService {
             console.log(`🖼️  Image URL: ${imageUrl}`);
 
             // 创建任务
-            const taskId = await this.createTask(clothing, imageUrl);
+            
+            const taskId = await this.createTask(`${IMAGE_GENERATION_BASE64_PROMPT}${clothing}`, imageUrl);
 
             console.log(`✅ KIE task created: ${taskId}`);
 
