@@ -35,7 +35,7 @@ interface KIEResultJson {
 }
 
 // 任务状态类型
-export type KIETaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type KIETaskStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'timeout';
 
 // 任务元数据（存储在 R2）
 export interface KIETaskMetadata {

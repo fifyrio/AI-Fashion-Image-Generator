@@ -9,11 +9,12 @@ import {
   listObjects,
   getBucketName,
   r2Client,
+  getKIETaskMetadata,
+  updateKIETaskMetadata,
 } from './r2';
 import { AIService } from './ai-service';
 import { ImageGenerator } from './image-generator';
 import { KIEImageService } from './kie-image-service';
-import { getKIETaskMetadata } from './r2';
 import {
   GenerationFailure,
   GenerationRequest,
@@ -138,37 +139,61 @@ async function saveGeneratedArtifact(params: {
 /**
  * 轮询等待 KIE 任务完成
  * @param taskId 任务 ID
- * @param maxAttempts 最大轮询次数（默认60次，共2分钟）
+ * @param maxAttempts 最大轮询次数（默认30次，共60秒）
  * @param intervalMs 轮询间隔（默认2秒）
  * @returns 生成的图片 URL 数组
  */
 async function pollKIETaskCompletion(
   taskId: string,
-  maxAttempts: number = 60,
+  maxAttempts: number = 30,
   intervalMs: number = 2000
 ): Promise<string[]> {
   for (let i = 0; i < maxAttempts; i++) {
     const metadata = await getKIETaskMetadata(taskId);
 
     if (!metadata) {
-      throw new Error(`Task metadata not found: ${taskId}`);
+      console.log(
+        `[pipeline] Task metadata not yet available for ${taskId} (attempt ${i + 1}/${maxAttempts})`
+      );
+    } else {
+      if (metadata.status === 'completed' && metadata.resultUrls && metadata.resultUrls.length > 0) {
+        console.log(`[pipeline] KIE task completed: ${taskId}`);
+        return metadata.resultUrls;
+      }
+
+      if (metadata.status === 'failed') {
+        throw new Error(`KIE task failed: ${metadata.error || 'Unknown error'}`);
+      }
+
+      if (metadata.status === 'timeout') {
+        throw new Error(`KIE task timed out: ${metadata.error || 'Timeout recorded in metadata'}`);
+      }
+
+      // 任务还在进行中，等待后重试
+      console.log(
+        `[pipeline] Waiting for KIE task ${taskId} (attempt ${i + 1}/${maxAttempts}), status="${metadata.status}"`
+      );
     }
 
-    if (metadata.status === 'completed' && metadata.resultUrls && metadata.resultUrls.length > 0) {
-      console.log(`[pipeline] KIE task completed: ${taskId}`);
-      return metadata.resultUrls;
-    }
-
-    if (metadata.status === 'failed') {
-      throw new Error(`KIE task failed: ${metadata.error || 'Unknown error'}`);
-    }
-
-    // 任务还在进行中，等待后重试
-    console.log(`[pipeline] Waiting for KIE task ${taskId} (attempt ${i + 1}/${maxAttempts})...`);
     await new Promise(resolve => setTimeout(resolve, intervalMs));
   }
 
-  throw new Error(`KIE task timeout: ${taskId} (waited ${maxAttempts * intervalMs / 1000} seconds)`);
+  const waitedSeconds = (maxAttempts * intervalMs) / 1000;
+  const timeoutMessage = `KIE task timeout: ${taskId} (waited ${waitedSeconds} seconds)`;
+
+  try {
+    await updateKIETaskMetadata(taskId, {
+      status: 'timeout',
+      error: timeoutMessage,
+    });
+  } catch (updateError) {
+    console.warn(
+      `[pipeline] Failed to record timeout for task ${taskId}:`,
+      updateError instanceof Error ? updateError.message : updateError
+    );
+  }
+
+  throw new Error(timeoutMessage);
 }
 
 export async function runGenerationPipeline(request: GenerationRequest): Promise<{
