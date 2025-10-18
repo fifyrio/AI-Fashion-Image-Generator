@@ -1,21 +1,19 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-The repository now centers on the Next.js application in `web-ui/`. Shared helpers (AI prompts, R2 client, pipeline orchestration) live under `web-ui/lib`. All uploads and generated assets are stored in Cloudflare R2; no local `generated/` or `chuandai/` directories are used anymore.
+All customer-facing UI work happens under `web-ui/`, a Next.js application. Pages and routes belong in `web-ui/app/`; colocate API handlers in `web-ui/app/api/` and shared UI utilities in `web-ui/lib/`. Store static assets in `web-ui/public/` and shared TypeScript types in `web-ui/lib/types.ts`. Generated imagery and uploads are always written to Cloudflare R2—do not create local `generated/` folders or check in binaries.
 
 ## Build, Test, and Development Commands
-- `npm run web` launches the Next.js UI (root script delegates to `web-ui`).
-- `npm run web:build` runs the production build.
-- `npm run web:lint` performs linting inside `web-ui/`.
+Use the root scripts to keep tooling consistent: `npm run web` starts the dev server, `npm run web:build` performs the production build, and `npm run web:lint` runs the lint suite inside `web-ui/`. Run these commands from the repository root so environment variables resolve via the shared `.env` file.
 
 ## Coding Style & Naming Conventions
-Write TypeScript as ES modules with four-space indentation and focused, named exports. Keep filenames in kebab-case (for example, `ai-service.ts`) and exported symbols in PascalCase or camelCase. Prefer `async/await`, reuse the shared interfaces in `web-ui/lib/types.ts`, centralize prompt strings, and keep log messages concise and actionable.
+Author TypeScript as ES modules with four-space indentation. Export named functions or components; avoid default exports. Files in `web-ui/` follow kebab-case (`ai-service.ts`), while symbols use PascalCase for components and camelCase for helpers. Reach for `async/await`, reuse shared types from `web-ui/lib/types.ts`, and centralize prompt strings in `web-ui/lib/prompts/`. Keep log output short, actionable, and redact identifiers.
 
 ## Testing Guidelines
-There is no automated suite; rely on manual smoke tests. Verify uploads land in Cloudflare R2, review API logs for OpenRouter rate-limit warnings, and run `npm run web:lint` or `npm run web:build` when touching application code. Document observed results (URLs, screenshots) in PR notes for reviewers.
+We rely on manual validation. Before opening a PR, run `npm run web:lint` and, when code paths change, `npm run web:build` to catch type or bundler errors. Smoke-test image generation end-to-end, confirm R2 uploads succeed, and monitor OpenRouter logs for throttling. Capture URLs or screenshots of your manual checks to include in the PR description.
 
 ## Commit & Pull Request Guidelines
-Follow the `type(scope): summary` subject style with imperative verbs and ≤72 characters (for example, `chore(web-ui): align env config`). Explain rationale, environment requirements, and manual verification commands in commit bodies or PR descriptions. Pull requests should highlight the motivation, outline major implementation points, list validation steps, and include before/after imagery for UI changes.
+Follow the Conventional Commit-inspired format `type(scope): summary`, written in the imperative and ≤72 characters (`chore(web-ui): align env config`). In commit bodies, note rationale, environment prerequisites, and manual verification steps. PRs should describe the motivation, summarize architecture or schema changes, enumerate validation steps, and attach before/after visuals for UI adjustments. Link related issues and flag any follow-up work.
 
 ## Security & Configuration Tips
-Copy `.env.example`, provide OpenRouter and Cloudflare R2 credentials, and export any additional URLs required for deployment. Never commit credentials or raw API responses. When sharing diagnostics, rely on sanitized demo assets and strip tokens from logs or screenshots before attaching them to issues or PRs.
+Clone `.env.example` to `.env.local`, supply OpenRouter and Cloudflare R2 credentials, and document any extra URLs required for previews. Do not commit secrets or raw API payloads. When sharing logs or screenshots, scrub tokens and customer data, and prefer sanitized demo assets.

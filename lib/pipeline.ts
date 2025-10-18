@@ -12,6 +12,8 @@ import {
 } from './r2';
 import { AIService } from './ai-service';
 import { ImageGenerator } from './image-generator';
+import { KIEImageService } from './kie-image-service';
+import { getKIETaskMetadata } from './r2';
 import {
   GenerationFailure,
   GenerationRequest,
@@ -133,15 +135,51 @@ async function saveGeneratedArtifact(params: {
   };
 }
 
+/**
+ * 轮询等待 KIE 任务完成
+ * @param taskId 任务 ID
+ * @param maxAttempts 最大轮询次数（默认60次，共2分钟）
+ * @param intervalMs 轮询间隔（默认2秒）
+ * @returns 生成的图片 URL 数组
+ */
+async function pollKIETaskCompletion(
+  taskId: string,
+  maxAttempts: number = 60,
+  intervalMs: number = 2000
+): Promise<string[]> {
+  for (let i = 0; i < maxAttempts; i++) {
+    const metadata = await getKIETaskMetadata(taskId);
+
+    if (!metadata) {
+      throw new Error(`Task metadata not found: ${taskId}`);
+    }
+
+    if (metadata.status === 'completed' && metadata.resultUrls && metadata.resultUrls.length > 0) {
+      console.log(`[pipeline] KIE task completed: ${taskId}`);
+      return metadata.resultUrls;
+    }
+
+    if (metadata.status === 'failed') {
+      throw new Error(`KIE task failed: ${metadata.error || 'Unknown error'}`);
+    }
+
+    // 任务还在进行中，等待后重试
+    console.log(`[pipeline] Waiting for KIE task ${taskId} (attempt ${i + 1}/${maxAttempts})...`);
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+
+  throw new Error(`KIE task timeout: ${taskId} (waited ${maxAttempts * intervalMs / 1000} seconds)`);
+}
+
 export async function runGenerationPipeline(request: GenerationRequest): Promise<{
   generated: GeneratedImageRecord[];
   failures: GenerationFailure[];
 }> {
   console.log(
-    `[pipeline] Starting generation for character="${request.character}" with ${request.uploads.length} reference(s)`
+    `[pipeline] Starting KIE generation for character="${request.character}" with ${request.uploads.length} reference(s)`
   );
   const aiService = new AIService();
-  const imageGenerator = new ImageGenerator();
+  const kieService = new KIEImageService();
 
   const generated: GeneratedImageRecord[] = [];
   const failures: GenerationFailure[] = [];
@@ -167,17 +205,27 @@ export async function runGenerationPipeline(request: GenerationRequest): Promise
       const modelImageUrl = getRandomModelUrl(request.character as Character);
       console.log(`[pipeline] Using model image URL="${modelImageUrl}"`);
 
-      const generationResult = await imageGenerator.generateImageBase64(clothingDetails, modelImageUrl);
-      if (!generationResult.success || !generationResult.result) {
+      // 使用 KIE 创建任务
+      const generationResult = await kieService.generateImageBase64(clothingDetails, modelImageUrl);
+      if (!generationResult.success || !generationResult.taskId) {
         console.warn(
-          `[pipeline] Generation failed for key="${upload.key}" reason="${generationResult.error ?? 'unknown'}"`
+          `[pipeline] KIE task creation failed for key="${upload.key}" reason="${generationResult.error ?? 'unknown'}"`
         );
-        throw new Error(generationResult.error || 'Image generation failed');
+        throw new Error(generationResult.error || 'KIE task creation failed');
       }
 
-      const { buffer, mimeType } = await resolveImageResult(generationResult.result);
+      const taskId = generationResult.taskId;
+      console.log(`[pipeline] KIE task created: ${taskId}, waiting for completion...`);
+
+      // 轮询等待任务完成（callback 会更新状态）
+      const resultUrls = await pollKIETaskCompletion(taskId);
+      console.log(`[pipeline] KIE task completed, got ${resultUrls.length} result(s)`);
+
+      // 获取第一个结果 URL
+      const resultUrl = resultUrls[0];
+      const { buffer, mimeType } = await resolveImageResult(resultUrl);
       console.log(
-        `[pipeline] Generation succeeded, mimeType="${mimeType}", bufferSize=${buffer.length} bytes`
+        `[pipeline] Downloaded result, mimeType="${mimeType}", bufferSize=${buffer.length} bytes`
       );
 
       let xiaohongshuTitle: string | undefined;
@@ -217,6 +265,80 @@ export async function runGenerationPipeline(request: GenerationRequest): Promise
     `[pipeline] Completed generation for character="${request.character}". Success=${generated.length}, failures=${failures.length}`
   );
   return { generated, failures };
+}
+
+/**
+ * KIE 异步生成管道（仅创建任务，不等待完成）
+ * 返回任务 ID 列表，实际生成通过 /api/callback 完成
+ */
+export async function runKIEGenerationPipeline(request: GenerationRequest): Promise<{
+  tasks: Array<{ taskId: string; source: UploadedReference; analysis: string }>;
+  failures: GenerationFailure[];
+}> {
+  console.log(
+    `[kie-pipeline] Starting KIE generation for character="${request.character}" with ${request.uploads.length} reference(s)`
+  );
+  const aiService = new AIService();
+  const kieService = new KIEImageService();
+
+  const tasks: Array<{ taskId: string; source: UploadedReference; analysis: string }> = [];
+  const failures: GenerationFailure[] = [];
+
+  for (let index = 0; index < request.uploads.length; index++) {
+    const upload = request.uploads[index];
+    console.log(
+      `[kie-pipeline] [${index + 1}/${request.uploads.length}] Processing key="${upload.key}" filename="${upload.filename ?? 'N/A'}"`
+    );
+    try {
+      const filename = upload.filename ?? path.basename(upload.key);
+      const analysisResult = await aiService.analyzeImage(upload.url, filename);
+
+      if (!analysisResult.success) {
+        console.warn(
+          `[kie-pipeline] Analysis failed for key="${upload.key}" reason="${analysisResult.error ?? 'unknown'}"`
+        );
+        throw new Error(analysisResult.error || 'Image analysis failed');
+      }
+
+      const clothingDetails = analysisResult.analysis;
+      console.log(`[kie-pipeline] Analysis succeeded, summary length=${clothingDetails.length}`);
+      const modelImageUrl = getRandomModelUrl(request.character as Character);
+      console.log(`[kie-pipeline] Using model image URL="${modelImageUrl}"`);
+
+      // 创建 KIE 任务（异步，不等待完成）
+      const generationResult = await kieService.generateImageBase64(clothingDetails, modelImageUrl);
+
+      if (!generationResult.success || !generationResult.taskId) {
+        console.warn(
+          `[kie-pipeline] Task creation failed for key="${upload.key}" reason="${generationResult.error ?? 'unknown'}"`
+        );
+        throw new Error(generationResult.error || 'KIE task creation failed');
+      }
+
+      console.log(`[kie-pipeline] KIE task created: ${generationResult.taskId}`);
+
+      tasks.push({
+        taskId: generationResult.taskId,
+        source: upload,
+        analysis: clothingDetails,
+      });
+
+    } catch (error) {
+      console.error(
+        `[kie-pipeline] Error processing key="${upload.key}":`,
+        error instanceof Error ? error.message : error
+      );
+      failures.push({
+        source: upload,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  console.log(
+    `[kie-pipeline] Completed task creation for character="${request.character}". Tasks=${tasks.length}, failures=${failures.length}`
+  );
+  return { tasks, failures };
 }
 
 async function streamToString(stream: Readable | ReadableStream<Uint8Array> | Blob): Promise<string> {

@@ -1,4 +1,5 @@
-import { S3Client, PutObjectCommand, ListObjectsV2Command, _Object } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, ListObjectsV2Command, GetObjectCommand, _Object } from '@aws-sdk/client-s3';
+import { KIETaskMetadata } from './kie-image-service';
 
 /**
  * Helper to read required environment variables with descriptive errors.
@@ -95,4 +96,78 @@ export async function listObjects(prefix = '', maxKeys = 1000): Promise<_Object[
 
 export function getBucketName(): string {
   return bucketName;
+}
+
+/**
+ * KIE 任务元数据管理
+ */
+
+// 生成任务元数据的 R2 Key
+function getTaskMetadataKey(taskId: string): string {
+  return `kie-tasks/${taskId}.json`;
+}
+
+/**
+ * 保存 KIE 任务元数据到 R2
+ */
+export async function saveKIETaskMetadata(metadata: KIETaskMetadata): Promise<void> {
+  const key = getTaskMetadataKey(metadata.taskId);
+  await uploadJsonToR2(key, metadata as unknown as Record<string, unknown>);
+  console.log(`✅ Saved KIE task metadata: ${key}`);
+}
+
+/**
+ * 从 R2 读取 KIE 任务元数据
+ */
+export async function getKIETaskMetadata(taskId: string): Promise<KIETaskMetadata | null> {
+  const key = getTaskMetadataKey(taskId);
+
+  try {
+    const command = new GetObjectCommand({
+      Bucket: bucketName,
+      Key: key,
+    });
+
+    const response = await r2Client.send(command);
+
+    if (!response.Body) {
+      return null;
+    }
+
+    // 读取流数据
+    const bodyString = await response.Body.transformToString();
+    const metadata = JSON.parse(bodyString) as KIETaskMetadata;
+
+    return metadata;
+  } catch (error) {
+    // 如果对象不存在，返回 null
+    if ((error as { name?: string }).name === 'NoSuchKey') {
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
+ * 更新 KIE 任务元数据
+ */
+export async function updateKIETaskMetadata(
+  taskId: string,
+  updates: Partial<KIETaskMetadata>
+): Promise<KIETaskMetadata | null> {
+  const existing = await getKIETaskMetadata(taskId);
+
+  if (!existing) {
+    console.warn(`⚠️  Task metadata not found: ${taskId}`);
+    return null;
+  }
+
+  const updated: KIETaskMetadata = {
+    ...existing,
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await saveKIETaskMetadata(updated);
+  return updated;
 }

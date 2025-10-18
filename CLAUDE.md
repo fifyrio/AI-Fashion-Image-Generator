@@ -21,14 +21,17 @@ This is a **Next.js 15 web application** using the App Router:
 ### Core Services
 
 - `ai-service.ts` – wraps OpenRouter GPT calls for analysis + title generation
-- `image-generator.ts` – invokes Gemini to render outfits
-- `pipeline.ts` – orchestrates the full workflow: analyze → generate → upload result metadata
+- `image-generator.ts` – (Legacy) invokes Gemini to render outfits
+- `kie-image-service.ts` – **Current default** image generation service using KIE API (google/nano-banana-edit model)
+- `pipeline.ts` – orchestrates the full workflow: analyze → generate (via KIE) → upload result metadata
 - `r2.ts` – uploads, lists, and retrieves objects in Cloudflare R2
 
 ### API Routes
 
 - `POST /api/upload` – pushes files straight to R2 and returns their public URLs
-- `POST /api/generate` – triggers the pipeline for the selected character using the uploaded references
+- `POST /api/generate` – triggers the KIE pipeline for the selected character using the uploaded references (waits for callback completion via polling)
+- `POST /api/callback` – receives KIE API webhook callbacks and processes completed generation tasks
+- `GET /api/task-status?taskId=xxx` – queries the status of a KIE generation task
 - `GET /api/results` – lists generated assets (reads metadata from R2)
 
 ## Environment Variables
@@ -45,6 +48,12 @@ Required environment variables:
 - `R2_BUCKET_NAME` – Cloudflare R2 bucket name
 - `R2_PUBLIC_BASE_URL` – Public base URL for R2 bucket
 - `R2_MODEL_BASE_URL` – (Optional) Base URL for model images
+
+**Required** for KIE image generation (current default):
+- `KIE_API_TOKEN` – KIE API token for google/nano-banana-edit model
+- `KIE_CALLBACK_URL` – Callback URL for KIE API (e.g., https://your-site.vercel.app/api/callback)
+
+**Note:** The application now uses KIE as the default image generation service. Ensure these variables are configured before deploying.
 
 ## Deployment on Vercel
 
