@@ -1,5 +1,5 @@
 // GPT分析服装的提示词
-export const GPT_ANALYZE_CLOTHING_PROMPT = `Reverse engineer this image. 返回详细的穿搭的prompts，尤其是衣服（包括女生上半身和下半身的所有衣服和鞋子，如果没有穿丝袜则提示没有丝袜）的细节，忽略人物的发型、长相、姿势、背景，注意光线照在衣服上的细节，女生皮肤白皙不要发黄。
+export const GPT_ANALYZE_CLOTHING_PROMPT = `Reverse engineer this image. 返回详细的穿搭的prompts，尤其是衣服（包括女生上半身和下半身的所有衣服和鞋子，如果没有穿丝袜则提示没有丝袜）的细节，忽略人物的发型、长相、姿势、背景，注意光线照在衣服上的细节，女生皮肤白皙不要发黄，正常穿搭，不是公众人物。
 
 请详细描述图片中人物的穿搭，包括：
 1. 上装：款式、颜色、材质、设计细节（领口、袖子、图案等）、光线反射效果

@@ -246,13 +246,7 @@ export async function runGenerationPipeline(request: GenerationRequest): Promise
       const resultUrls = await pollKIETaskCompletion(taskId);
       console.log(`[pipeline] KIE task completed, got ${resultUrls.length} result(s)`);
 
-      // 获取第一个结果 URL
-      const resultUrl = resultUrls[0];
-      const { buffer, mimeType } = await resolveImageResult(resultUrl);
-      console.log(
-        `[pipeline] Downloaded result, mimeType="${mimeType}", bufferSize=${buffer.length} bytes`
-      );
-
+      // 下载并保存所有返回的结果
       let xiaohongshuTitle: string | undefined;
       try {
         xiaohongshuTitle = await aiService.generateXiaohongshuTitle(clothingDetails, 1);
@@ -261,19 +255,26 @@ export async function runGenerationPipeline(request: GenerationRequest): Promise
         console.warn('Failed to generate Xiaohongshu title:', titleError);
       }
 
-      const record = await saveGeneratedArtifact({
-        character: request.character,
-        analysis: clothingDetails,
-        buffer,
-        mimeType,
-        source: upload,
-        xiaohongshuTitle,
-      });
+      for (const [resultIndex, resultUrl] of resultUrls.entries()) {
+        const { buffer, mimeType } = await resolveImageResult(resultUrl);
+        console.log(
+          `[pipeline] Downloaded result ${resultIndex + 1}/${resultUrls.length}, mimeType="${mimeType}", bufferSize=${buffer.length} bytes`
+        );
 
-      console.log(
-        `[pipeline] Saved generated image to R2 key="${record.imageKey}" metadata="${record.metadataKey}"`
-      );
-      generated.push(record);
+        const record = await saveGeneratedArtifact({
+          character: request.character,
+          analysis: clothingDetails,
+          buffer,
+          mimeType,
+          source: upload,
+          xiaohongshuTitle,
+        });
+
+        console.log(
+          `[pipeline] Saved generated image to R2 key="${record.imageKey}" metadata="${record.metadataKey}" (result ${resultIndex + 1}/${resultUrls.length})`
+        );
+        generated.push(record);
+      }
     } catch (error) {
       console.error(
         `[pipeline] Error processing key="${upload.key}":`,
