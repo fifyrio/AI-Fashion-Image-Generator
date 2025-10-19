@@ -265,7 +265,7 @@ export default function Home() {
           character: item.character ?? '',
         }));
 
-        setGeneratedImages(mapped);
+        setGeneratedImages(mapped.slice(0, 10));
       }
     } catch (error) {
       console.error('Error fetching generated images:', error);
