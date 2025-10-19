@@ -417,6 +417,8 @@ export async function listGeneratedImages(): Promise<GeneratedImageSummary[]> {
     if (!object.Key) continue;
     const ext = path.extname(object.Key).toLowerCase();
     if (!['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'].includes(ext)) continue;
+    const filename = path.basename(object.Key);
+    if (filename.startsWith('kie-')) continue;
 
     const metadataKey = object.Key.replace(ext, '.json');
     let xiaohongshuTitle: string | undefined;
