@@ -591,8 +591,8 @@ export default function Home() {
                         unoptimized
                       />
                     </div>
-                    <div className="p-3 bg-white space-y-2">
-                      {image.xiaohongshuTitle && (
+                    {image.xiaohongshuTitle && (
+                      <div className="p-3 bg-white">
                         <div className="bg-gradient-to-r from-pink-50 to-red-50 p-3 rounded-lg border border-pink-200">
                           <div className="flex items-center gap-2 mb-2">
                             <span className="text-lg">📝</span>
@@ -602,26 +602,8 @@ export default function Home() {
                             {image.xiaohongshuTitle}
                           </p>
                         </div>
-                      )}
-                      {image.analysis && (
-                        <div className="bg-gray-50 border border-gray-200 p-2 rounded-md">
-                          <p className="text-xs text-gray-600 whitespace-pre-line leading-relaxed">
-                            {image.analysis}
-                          </p>
-                        </div>
-                      )}
-                      {image.source?.filename && (
-                        <p className="text-xs text-gray-500">
-                          Source: <span className="break-all">{image.source.filename}</span>
-                        </p>
-                      )}
-                      <p className="text-xs text-gray-600 truncate font-medium">
-                        {image.imageKey}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        {new Date(image.createdAt).toLocaleString()}
-                      </p>
-                    </div>
+                      </div>
+                    )}
                     <div className="absolute top-2 right-2">
                       <a
                         href={`/api/download?key=${encodeURIComponent(image.imageKey)}`}
