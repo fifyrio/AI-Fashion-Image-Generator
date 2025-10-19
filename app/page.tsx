@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { UploadedReference } from '@/lib/types';
 import type { GeneratedImageSummary } from '@/lib/pipeline';
 
@@ -56,6 +56,48 @@ export default function Home() {
   const [generateStatus, setGenerateStatus] = useState<string>('');
   const [isDragging, setIsDragging] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
+  const [mockProgress, setMockProgress] = useState(0);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const progressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearMockProgressTimers = () => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+    if (progressTimeoutRef.current) {
+      clearTimeout(progressTimeoutRef.current);
+      progressTimeoutRef.current = null;
+    }
+  };
+
+  const startMockProgress = () => {
+    clearMockProgressTimers();
+    setMockProgress(5);
+    progressIntervalRef.current = setInterval(() => {
+      setMockProgress(prev => {
+        if (prev >= 90) {
+          return prev;
+        }
+        const increment = Math.random() * 10 + 5;
+        return Math.min(prev + increment, 90);
+      });
+    }, 600);
+  };
+
+  const completeMockProgress = () => {
+    clearMockProgressTimers();
+    setMockProgress(100);
+    progressTimeoutRef.current = setTimeout(() => {
+      setMockProgress(0);
+      progressTimeoutRef.current = null;
+    }, 800);
+  };
+
+  const resetMockProgress = () => {
+    clearMockProgressTimers();
+    setMockProgress(0);
+  };
 
   // Auto-upload when files are selected
   const uploadFile = async (fileWithStatus: FileWithStatus, index: number) => {
@@ -234,6 +276,12 @@ export default function Home() {
     fetchGeneratedImages();
   }, []);
 
+  useEffect(() => {
+    return () => {
+      clearMockProgressTimers();
+    };
+  }, []);
+
   const handleGenerate = async () => {
     const uploadedFiles = filesWithStatus.filter(f => f.status === 'uploaded' && f.uploadedInfo);
 
@@ -245,6 +293,7 @@ export default function Home() {
     setGenerating(true);
     setGenerateStatus('Generating images... This may take a while.');
     setGeneratedImages([]);
+    startMockProgress();
 
     try {
       const response = await fetch('/api/generate', {
@@ -280,11 +329,14 @@ export default function Home() {
         }
 
         setGenerateStatus(lines.join('\n'));
+        completeMockProgress();
       } else {
         setGenerateStatus(`Generation failed: ${data.error ?? 'Unknown error'}`);
+        resetMockProgress();
       }
     } catch (error) {
       setGenerateStatus(`Generation error: ${error}`);
+      resetMockProgress();
     } finally {
       setGenerating(false);
     }
@@ -564,6 +616,20 @@ export default function Home() {
                 }`}
               >
                 {generateStatus}
+              </div>
+            )}
+            {mockProgress > 0 && (
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between text-sm font-medium text-purple-700">
+                  <span>AI pipeline running…</span>
+                  <span>{Math.min(100, Math.round(mockProgress))}%</span>
+                </div>
+                <div className="h-2 bg-purple-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500"
+                    style={{ width: `${Math.min(mockProgress, 100)}%` }}
+                  />
+                </div>
               </div>
             )}
           </div>
