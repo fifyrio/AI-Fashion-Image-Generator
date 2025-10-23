@@ -30,7 +30,7 @@ export const GPT_ANALYZE_BG_GESTURE_PROMPT = `请详细描述图片中的背景�
 请用中文回答，注重细节描述。`;
 
 // Gemini生成图片的提示词（普通模式）
-export const IMAGE_GENERATION_PROMPT = `将上传的图片换成下面的效果，保持人物身材的一致性(Voluptuous body, Small waist,wide hips)，图片的人物有合适的影子,背景不要变，女生皮肤雪白白皙。
+export const IMAGE_GENERATION_PROMPT = `将上传的图片换成下面的效果，保持人物身材的一致性(Voluptuous body, Small waist,wide hips)，图片的人物有合适的影子,背景不要变，女生皮肤不要发黄。
 要求：
 1. 保持模特的姿态和表情
 2. 服装要自然贴合模特身材
