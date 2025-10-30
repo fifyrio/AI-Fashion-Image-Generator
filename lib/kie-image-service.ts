@@ -197,6 +197,7 @@ export class KIEImageService {
             // 创建任务
             
             const taskId = await this.createTask(`${IMAGE_GENERATION_BASE64_PROMPT}${clothing}`, imageUrl);
+            console.log(`✅ prompts: ${IMAGE_GENERATION_BASE64_PROMPT}${clothing}`);
 
             console.log(`✅ KIE task created: ${taskId}`);
 

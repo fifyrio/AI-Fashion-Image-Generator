@@ -53,7 +53,11 @@ export const IMAGE_GENERATION_NEW_BG_GESTURE_PROMPT = `请根据以下描述，�
 5. 保持专业的摄影质量`;
 
 // Gemini生成Base64图片的提示词
-export const IMAGE_GENERATION_BASE64_PROMPT = `将上传的图片换成下面的效果，保持人物身材的一致性(Voluptuous body, Small waist,wide hips)，图片的人物有合适的影子,背景不要变，女生皮肤雪白白皙，腿部肤色要白皙通透不要发黄。
+export const IMAGE_GENERATION_BASE64_PROMPT = `保持人物身材一致（丰盈曲线、小蛮腰、宽胯），背景不变，光影自然；
+女生不穿丝袜，展现真实腿部肌肤质感；
+皮肤整体雪白通透，腿部在柔和光线照射下泛着细腻的亮度；
+光线从上方或侧面打在腿上，形成自然高光与阴影过渡（尤其是大腿与膝盖处），增强立体感与真实度；
+肤色要白皙但不过曝，不偏蓝，整体呈柔光美感。
 
 核心要求 - 必须严格遵守：
 1. **完全保持模特的身材比例、体型和身高** - 不要改变模特的胖瘦、身材曲线、肩宽、腰围等任何身体特征
