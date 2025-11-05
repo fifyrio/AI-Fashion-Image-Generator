@@ -22,7 +22,7 @@ import {
   UploadedReference,
 } from './types';
 
-export const VALID_CHARACTERS = ['lin', 'Qiao', 'lin_home_1', 'ayi'] as const;
+export const VALID_CHARACTERS = ['lin', 'Qiao', 'qiao_mask'] as const;
 export type Character = (typeof VALID_CHARACTERS)[number];
 
 function getModelBaseUrl(): string {

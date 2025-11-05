@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
   if (!character || !VALID_CHARACTERS.includes(character as (typeof VALID_CHARACTERS)[number])) {
     console.warn('[api/generate] Invalid character provided:', character);
     return NextResponse.json(
-      { error: 'Invalid character. Supported values: lin, Qiao, lin_home_1, ayi' },
+      { error: 'Invalid character. Supported values: lin, Qiao, qiao_mask' },
       { status: 400 }
     );
   }

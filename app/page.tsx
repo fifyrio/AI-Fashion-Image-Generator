@@ -14,13 +14,7 @@ interface CharacterOption {
 const CHARACTER_OPTIONS: CharacterOption[] = [
   { id: 'lin', label: 'Lin', image: 'https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/lin/frame_1.jpg' },
   { id: 'Qiao', label: 'Qiao', image: 'https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/Qiao/frame_1.jpg' },
-  { id: 'lin_home_1', label: 'Lin Home 1', image: 'https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/lin_home_1/frame_1.png' },
-  {
-    id: 'ayi',
-    label: 'Ayi',
-    image:
-      'https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/ayi/frame_1.jpg',
-  },
+  { id: 'qiao_mask', label: 'Qiao with Mask', image: 'https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/qiao_mask/frame_1.jpg' }  
 ];
 
 interface FileWithStatus {
@@ -703,7 +697,7 @@ export default function Home() {
             <h3 className="font-semibold text-blue-900 mb-2">How it works:</h3>
             <ol className="list-decimal list-inside space-y-1 text-sm text-blue-800">
               <li>Select fashion images - they automatically upload to Cloudflare R2</li>
-              <li>Select a character model (lin, Qiao, lin_home_1, or ayi)</li>
+              <li>Select a character model (lin, Qiao, qiao_mask)</li>
               <li>Click Generate to create AI-powered fashion images</li>
               <li>The service analyzes your reference images and generates new outfits</li>
               <li>Download generated images with Xiaohongshu-ready titles</li>
