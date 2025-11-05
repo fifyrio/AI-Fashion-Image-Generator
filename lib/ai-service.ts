@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { openRouterConfig, AI_MODELS } from './config';
 import { ImageAnalysisResult } from './types';
-import { GPT_ANALYZE_CLOTHING_PROMPT, XIAOHONGSHU_TITLE_PROMPT } from './prompts';
+import { GPT_ANALYZE_CLOTHING_PROMPT, GPT_ANALYZE_CLOTHING_NO_ACCESSORIES_PROMPT, XIAOHONGSHU_TITLE_PROMPT } from './prompts';
 
 // AI服务类
 export class AIService {
@@ -15,14 +15,19 @@ export class AIService {
     }
 
     // 调用GPT模型分析图片
-    async analyzeWithGPT(imageSource: string): Promise<string> {
+    async analyzeWithGPT(imageSource: string, ignoreAccessories: boolean = false): Promise<string> {
         console.log('📡 正在调用GPT API...');
         console.log('🔧 模型:', AI_MODELS.GPT);
+        console.log('🔧 忽略配饰:', ignoreAccessories);
+
+        const prompt = ignoreAccessories
+            ? GPT_ANALYZE_CLOTHING_NO_ACCESSORIES_PROMPT
+            : GPT_ANALYZE_CLOTHING_PROMPT;
 
         const content: OpenAI.Chat.ChatCompletionContentPart[] = [
             {
                 type: "text",
-                text: GPT_ANALYZE_CLOTHING_PROMPT
+                text: prompt
             },
             {
                 type: "image_url",
@@ -72,11 +77,11 @@ export class AIService {
     }
 
     // 分析图片接口 - 只使用GPT模型
-    async analyzeImage(imageSource: string, filename: string): Promise<ImageAnalysisResult> {
+    async analyzeImage(imageSource: string, filename: string, ignoreAccessories: boolean = false): Promise<ImageAnalysisResult> {
         const startTime = new Date();
 
         try {
-            const analysis = await this.analyzeWithGPT(imageSource);
+            const analysis = await this.analyzeWithGPT(imageSource, ignoreAccessories);
 
             return {
                 filename,

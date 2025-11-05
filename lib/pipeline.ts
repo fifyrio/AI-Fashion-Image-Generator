@@ -13,7 +13,6 @@ import {
   updateKIETaskMetadata,
 } from './r2';
 import { AIService } from './ai-service';
-import { ImageGenerator } from './image-generator';
 import { KIEImageService } from './kie-image-service';
 import {
   GenerationFailure,
@@ -201,7 +200,7 @@ export async function runGenerationPipeline(request: GenerationRequest): Promise
   failures: GenerationFailure[];
 }> {
   console.log(
-    `[pipeline] Starting KIE generation for character="${request.character}" with ${request.uploads.length} reference(s)`
+    `[pipeline] Starting KIE generation for character="${request.character}" with ${request.uploads.length} reference(s), ignoreAccessories=${request.ignoreAccessories ?? false}`
   );
   const aiService = new AIService();
   const kieService = new KIEImageService();
@@ -216,7 +215,7 @@ export async function runGenerationPipeline(request: GenerationRequest): Promise
     );
     try {
       const filename = upload.filename ?? path.basename(upload.key);
-      const analysisResult = await aiService.analyzeImage(upload.url, filename);
+      const analysisResult = await aiService.analyzeImage(upload.url, filename, request.ignoreAccessories);
 
       if (!analysisResult.success) {
         console.warn(
@@ -302,7 +301,7 @@ export async function runKIEGenerationPipeline(request: GenerationRequest): Prom
   failures: GenerationFailure[];
 }> {
   console.log(
-    `[kie-pipeline] Starting KIE generation for character="${request.character}" with ${request.uploads.length} reference(s)`
+    `[kie-pipeline] Starting KIE generation for character="${request.character}" with ${request.uploads.length} reference(s), ignoreAccessories=${request.ignoreAccessories ?? false}`
   );
   const aiService = new AIService();
   const kieService = new KIEImageService();
@@ -317,7 +316,7 @@ export async function runKIEGenerationPipeline(request: GenerationRequest): Prom
     );
     try {
       const filename = upload.filename ?? path.basename(upload.key);
-      const analysisResult = await aiService.analyzeImage(upload.url, filename);
+      const analysisResult = await aiService.analyzeImage(upload.url, filename, request.ignoreAccessories);
 
       if (!analysisResult.success) {
         console.warn(

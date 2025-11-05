@@ -13,7 +13,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { character, uploads } = body as { character?: string; uploads?: UploadedReference[] };
+  const { character, uploads, ignoreAccessories } = body as {
+    character?: string;
+    uploads?: UploadedReference[];
+    ignoreAccessories?: boolean;
+  };
 
   if (!character || !VALID_CHARACTERS.includes(character as (typeof VALID_CHARACTERS)[number])) {
     console.warn('[api/generate] Invalid character provided:', character);
@@ -34,10 +38,11 @@ export async function POST(request: NextRequest) {
   const requestPayload: GenerationRequest = {
     character,
     uploads,
+    ignoreAccessories: ignoreAccessories ?? false,
   };
 
   console.log(
-    `[api/generate] Received request for character="${character}" with ${uploads.length} upload(s)`
+    `[api/generate] Received request for character="${character}" with ${uploads.length} upload(s), ignoreAccessories=${ignoreAccessories ?? false}`
   );
 
   const { generated, failures } = await runGenerationPipeline(requestPayload);
