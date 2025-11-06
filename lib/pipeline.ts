@@ -67,18 +67,48 @@ async function resolveImageResult(result: string): Promise<{ buffer: Buffer; mim
   }
 
   if (result.startsWith('http://') || result.startsWith('https://')) {
-    const response = await fetch(result);
-    if (!response.ok) {
-      throw new Error(`Failed to download generated image: ${response.status} ${response.statusText}`);
+    console.log(`[resolveImageResult] Fetching image from URL: ${result}`);
+
+    try {
+      // 添加超时控制（60秒）
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+      const response = await fetch(result, {
+        signal: controller.signal,
+        // 添加这些选项以提高兼容性
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; AI-Fashion-Generator/1.0)',
+        },
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`Failed to download generated image: ${response.status} ${response.statusText}`);
+      }
+
+      const contentType = response.headers.get('content-type')?.split(';')[0] || 'image/png';
+      console.log(`[resolveImageResult] Content-Type: ${contentType}`);
+
+      const arrayBuffer = await response.arrayBuffer();
+      console.log(`[resolveImageResult] Downloaded ${arrayBuffer.byteLength} bytes`);
+
+      return {
+        mimeType: contentType,
+        buffer: Buffer.from(arrayBuffer),
+      };
+    } catch (fetchError) {
+      const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
+      console.error(`[resolveImageResult] Fetch error for URL ${result}:`, errorMessage);
+
+      // 提供更详细的错误信息
+      if (errorMessage.includes('aborted')) {
+        throw new Error(`Timeout downloading image from ${result} (waited 60 seconds)`);
+      }
+
+      throw new Error(`Failed to fetch image from ${result}: ${errorMessage}`);
     }
-
-    const contentType = response.headers.get('content-type')?.split(';')[0] || 'image/png';
-    const arrayBuffer = await response.arrayBuffer();
-
-    return {
-      mimeType: contentType,
-      buffer: Buffer.from(arrayBuffer),
-    };
   }
 
   throw new Error('Unsupported generated result format. Expected data URI or HTTPS URL.');
