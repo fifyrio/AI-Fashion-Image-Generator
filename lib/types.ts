@@ -62,7 +62,7 @@ export interface UploadedReference {
 export interface GenerationRequest {
     character: string;
     uploads: UploadedReference[];
-    ignoreAccessories?: boolean;
+    extractTopOnly?: boolean;
 }
 
 // 单张生成结果

@@ -200,7 +200,7 @@ export async function runGenerationPipeline(request: GenerationRequest): Promise
   failures: GenerationFailure[];
 }> {
   console.log(
-    `[pipeline] Starting KIE generation for character="${request.character}" with ${request.uploads.length} reference(s), ignoreAccessories=${request.ignoreAccessories ?? false}`
+    `[pipeline] Starting KIE generation for character="${request.character}" with ${request.uploads.length} reference(s), extractTopOnly=${request.extractTopOnly ?? false}`
   );
   const aiService = new AIService();
   const kieService = new KIEImageService();
@@ -215,7 +215,7 @@ export async function runGenerationPipeline(request: GenerationRequest): Promise
     );
     try {
       const filename = upload.filename ?? path.basename(upload.key);
-      const analysisResult = await aiService.analyzeImage(upload.url, filename, request.ignoreAccessories);
+      const analysisResult = await aiService.analyzeImage(upload.url, filename, request.extractTopOnly ?? false);
 
       if (!analysisResult.success) {
         console.warn(
@@ -301,7 +301,7 @@ export async function runKIEGenerationPipeline(request: GenerationRequest): Prom
   failures: GenerationFailure[];
 }> {
   console.log(
-    `[kie-pipeline] Starting KIE generation for character="${request.character}" with ${request.uploads.length} reference(s), ignoreAccessories=${request.ignoreAccessories ?? false}`
+    `[kie-pipeline] Starting KIE generation for character="${request.character}" with ${request.uploads.length} reference(s), extractTopOnly=${request.extractTopOnly ?? false}`
   );
   const aiService = new AIService();
   const kieService = new KIEImageService();
@@ -316,7 +316,7 @@ export async function runKIEGenerationPipeline(request: GenerationRequest): Prom
     );
     try {
       const filename = upload.filename ?? path.basename(upload.key);
-      const analysisResult = await aiService.analyzeImage(upload.url, filename, request.ignoreAccessories);
+      const analysisResult = await aiService.analyzeImage(upload.url, filename, request.extractTopOnly ?? false);
 
       if (!analysisResult.success) {
         console.warn(

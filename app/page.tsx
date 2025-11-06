@@ -51,7 +51,7 @@ export default function Home() {
   const [isDragging, setIsDragging] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [mockProgress, setMockProgress] = useState(0);
-  const [ignoreAccessories, setIgnoreAccessories] = useState(false);
+  const [extractTopOnly, setExtractTopOnly] = useState(false);
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -299,7 +299,7 @@ export default function Home() {
         body: JSON.stringify({
           character,
           uploads: uploadedFiles.map(f => f.uploadedInfo),
-          ignoreAccessories,
+          extractTopOnly,
         }),
       });
 
@@ -533,6 +533,33 @@ export default function Home() {
                 </div>
               </div>
             )}
+
+            {/* Extract Top Only Option */}
+            {filesWithStatus.length > 0 && (
+              <div className="bg-gradient-to-r from-orange-50 to-yellow-50 rounded-lg p-4 border border-orange-200">
+                <label className="flex items-center cursor-pointer group">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={extractTopOnly}
+                      onChange={(e) => setExtractTopOnly(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-orange-500 peer-focus:ring-4 peer-focus:ring-orange-300 transition-all"></div>
+                    <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                  </div>
+                  <div className="ml-3 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">👕</span>
+                      <span className="font-semibold text-gray-800">只提取上装</span>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-1">
+                      开启后，AI 只会分析和提取上传图片中的上装（上衣、外套等），完全忽略下装、鞋子和配饰
+                    </p>
+                  </div>
+                </label>
+              </div>
+            )}
           </div>
 
           {/* Character Selection Section */}
@@ -587,36 +614,10 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Options Section */}
-          <div className="space-y-4">
-            <h2 className="text-2xl font-semibold text-gray-700">
-              3. Generation Options
-            </h2>
-
-            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-              <label className="flex items-center cursor-pointer group">
-                <div className="relative">
-                  <input
-                    type="checkbox"
-                    checked={ignoreAccessories}
-                    onChange={(e) => setIgnoreAccessories(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-purple-600 peer-focus:ring-4 peer-focus:ring-purple-300 transition-all"></div>
-                  <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
-                </div>
-                <div className="ml-3">
-                  <span className="font-medium text-gray-700">忽略配饰</span>
-                  <p className="text-sm text-gray-500">开启后，AI 分析时将忽略上传图片中的配饰（包包、首饰、帽子、眼镜、腰带等）</p>
-                </div>
-              </label>
-            </div>
-          </div>
-
           {/* Generate Section */}
           <div className="space-y-4">
             <h2 className="text-2xl font-semibold text-gray-700">
-              4. Generate Images
+              3. Generate Images
             </h2>
 
             <button
