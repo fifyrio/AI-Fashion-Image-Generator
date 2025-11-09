@@ -145,4 +145,70 @@ export class AIService {
             throw error;
         }
     }
+
+    // 分析场景和姿势建议
+    async analyzeSceneAndPose(imageSource: string): Promise<{
+        description: string;
+        suggestions: Array<{ scene: string; pose: string }>;
+    }> {
+        console.log('🎭 正在分析场景和姿势...');
+        console.log('🔧 模型:', AI_MODELS.GPT);
+
+        const defaultBoutiqueScene = 'minimalist boutique clothing store interior with modern industrial design, large floor-to-ceiling window showing a rainy city street outside with raindrops on glass, textured concrete wall, dark wooden floor, simple clothing rack with neatly hung neutral-toned clothes, cozy corner by the window with a laptop, magazines, and a cup of latte on the stone ledge, soft natural daylight filtered through rain, calm rainy-day atmosphere, cinematic lighting';
+
+        const prompt = `描述我上传的图片的服装特征，并给我4个穿着此衣服的模特姿势+场景搭配组合，场景和姿势要详细(场景默认有这个'服装店'场景: ${defaultBoutiqueScene})
+
+请以JSON格式返回结果，格式如下：
+{
+  "description": "服装描述",
+  "suggestions": [
+    {"scene": "场景1详细描述", "pose": "姿势1详细描述"},
+    {"scene": "场景2详细描述", "pose": "姿势2详细描述"},
+    {"scene": "场景3详细描述", "pose": "姿势3详细描述"},
+    {"scene": "场景4详细描述", "pose": "姿势4详细描述"}
+  ]
+}`;
+
+        const content: OpenAI.Chat.ChatCompletionContentPart[] = [
+            {
+                type: "text",
+                text: prompt
+            },
+            {
+                type: "image_url",
+                image_url: { url: imageSource }
+            }
+        ];
+
+        try {
+            const completion = await this.client.chat.completions.create({
+                model: AI_MODELS.GPT,
+                messages: [{ role: "user", content }],
+                max_tokens: 4000,
+                temperature: 0.7,
+                response_format: { type: "json_object" }
+            }, {
+                headers: {
+                    "HTTP-Referer": openRouterConfig.siteUrl,
+                    "X-Title": openRouterConfig.siteName
+                }
+            });
+
+            console.log('📦 API完整响应:', JSON.stringify(completion, null, 2));
+
+            if (completion.choices?.[0]?.message?.content) {
+                const responseContent = completion.choices[0].message.content;
+                console.log('✅ 响应内容:', responseContent);
+
+                const result = JSON.parse(responseContent);
+                return result;
+            }
+
+            throw new Error('场景姿势分析失败：API响应格式错误或内容为空');
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error('🚨 场景姿势分析失败:', errorMessage);
+            throw error;
+        }
+    }
 }

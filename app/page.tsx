@@ -46,6 +46,11 @@ type GeneratedImage = {
 
 type TabType = 'outfit-change' | 'scene-pose';
 
+interface ScenePoseSuggestion {
+  scene: string;
+  pose: string;
+}
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>('outfit-change');
   const [filesWithStatus, setFilesWithStatus] = useState<FileWithStatus[]>([]);
@@ -58,6 +63,16 @@ export default function Home() {
   const [extractTopOnly, setExtractTopOnly] = useState(false);
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Scene-Pose tab states
+  const [scenePoseFile, setScenePoseFile] = useState<File | null>(null);
+  const [scenePosePreview, setScenePosePreview] = useState<string>('');
+  const [scenePoseAnalyzing, setScenePoseAnalyzing] = useState(false);
+  const [scenePoseAnalysis, setScenePoseAnalysis] = useState<{
+    description: string;
+    suggestions: ScenePoseSuggestion[];
+  } | null>(null);
+  const [scenePoseError, setScenePoseError] = useState<string>('');
 
   const clearMockProgressTimers = () => {
     if (progressIntervalRef.current) {
@@ -344,6 +359,79 @@ export default function Home() {
 
   const uploadedCount = filesWithStatus.filter(f => f.status === 'uploaded').length;
   const uploadingCount = filesWithStatus.filter(f => f.status === 'uploading').length;
+
+  // Scene-Pose tab handlers
+  const handleScenePoseFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setScenePoseFile(file);
+    setScenePoseError('');
+    setScenePoseAnalysis(null);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setScenePosePreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleScenePoseAnalyze = async () => {
+    if (!scenePoseFile) {
+      setScenePoseError('Please select an image first');
+      return;
+    }
+
+    setScenePoseAnalyzing(true);
+    setScenePoseError('');
+
+    try {
+      // Upload to R2 first
+      const formData = new FormData();
+      formData.append('files', scenePoseFile);
+
+      const uploadResponse = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error('Failed to upload image');
+      }
+
+      const uploadData = await uploadResponse.json();
+      const uploadedUrl = uploadData.uploaded[0].url;
+
+      // Analyze the image
+      const analyzeResponse = await fetch('/api/analyze-scene-pose', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ imageUrl: uploadedUrl }),
+      });
+
+      if (!analyzeResponse.ok) {
+        const errorData = await analyzeResponse.json();
+        throw new Error(errorData.error || 'Analysis failed');
+      }
+
+      const result = await analyzeResponse.json();
+      setScenePoseAnalysis(result);
+    } catch (error) {
+      setScenePoseError(error instanceof Error ? error.message : 'Analysis failed');
+    } finally {
+      setScenePoseAnalyzing(false);
+    }
+  };
+
+  const clearScenePose = () => {
+    setScenePoseFile(null);
+    setScenePosePreview('');
+    setScenePoseAnalysis(null);
+    setScenePoseError('');
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-8">
@@ -777,22 +865,151 @@ export default function Home() {
 
           {/* Scene + Pose Tab Content */}
           {activeTab === 'scene-pose' && (
-            <div className="flex flex-col items-center justify-center py-20">
-              <div className="text-center space-y-4">
-                <div className="text-6xl mb-4">🎭</div>
-                <h3 className="text-2xl font-semibold text-gray-700">更换场景+姿势</h3>
-                <p className="text-gray-500 max-w-md">
-                  此功能即将推出，敬请期待！
-                </p>
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-6 mt-6 max-w-md">
-                  <h4 className="font-semibold text-purple-900 mb-3">计划功能：</h4>
-                  <ul className="text-sm text-purple-800 space-y-2 text-left">
-                    <li>• 更换模特的背景场景</li>
-                    <li>• 调整模特的姿势和动作</li>
-                    <li>• 自定义场景参数</li>
-                    <li>• AI 驱动的场景生成</li>
-                  </ul>
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-semibold text-gray-700">
+                    上传服装图片
+                  </h2>
+                  {scenePoseFile && (
+                    <button
+                      onClick={clearScenePose}
+                      className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white font-medium px-4 py-2 rounded-lg transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      清除
+                    </button>
+                  )}
                 </div>
+
+                {/* Upload Area */}
+                {!scenePoseFile ? (
+                  <label
+                    htmlFor="scene-pose-upload"
+                    className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer transition-all border-gray-300 bg-gray-50 hover:bg-gray-100"
+                  >
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                      <svg
+                        className="w-16 h-16 mb-4 text-gray-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                        />
+                      </svg>
+                      <div className="bg-purple-500 hover:bg-purple-600 text-white font-semibold py-3 px-8 rounded-lg mb-4">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                          </svg>
+                          上传服装图片
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-500">
+                        支持 JPEG、PNG、GIF 格式
+                      </p>
+                    </div>
+                    <input
+                      id="scene-pose-upload"
+                      type="file"
+                      className="hidden"
+                      accept="image/*"
+                      onChange={handleScenePoseFileChange}
+                    />
+                  </label>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Image Preview */}
+                    <div className="relative w-full h-96 bg-gray-100 rounded-lg overflow-hidden">
+                      <Image
+                        src={scenePosePreview}
+                        alt="上传的服装图片"
+                        fill
+                        className="object-contain"
+                        unoptimized
+                      />
+                    </div>
+
+                    {/* Analyze Button */}
+                    <button
+                      onClick={handleScenePoseAnalyze}
+                      disabled={scenePoseAnalyzing}
+                      className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100"
+                    >
+                      {scenePoseAnalyzing ? (
+                        <div className="flex items-center justify-center gap-3">
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                          <span>AI 分析中...</span>
+                        </div>
+                      ) : (
+                        '开始 AI 分析'
+                      )}
+                    </button>
+
+                    {/* Error Message */}
+                    {scenePoseError && (
+                      <div className="p-4 rounded-lg bg-red-100 text-red-800">
+                        {scenePoseError}
+                      </div>
+                    )}
+
+                    {/* Analysis Results */}
+                    {scenePoseAnalysis && (
+                      <div className="space-y-4">
+                        {/* Description */}
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                          <h3 className="font-semibold text-blue-900 mb-2">服装描述：</h3>
+                          <p className="text-blue-800 whitespace-pre-line">
+                            {scenePoseAnalysis.description}
+                          </p>
+                        </div>
+
+                        {/* Suggestions */}
+                        <div className="space-y-3">
+                          <h3 className="text-xl font-semibold text-gray-700">
+                            场景+姿势建议 ({scenePoseAnalysis.suggestions.length} 个)
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {scenePoseAnalysis.suggestions.map((suggestion, index) => (
+                              <div
+                                key={index}
+                                className="bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-4 space-y-3"
+                              >
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="text-2xl">🎭</span>
+                                  <span className="font-semibold text-purple-900">
+                                    建议 {index + 1}
+                                  </span>
+                                </div>
+                                <div className="space-y-2">
+                                  <div>
+                                    <span className="text-sm font-semibold text-purple-800">场景：</span>
+                                    <p className="text-sm text-gray-700 mt-1">
+                                      {suggestion.scene}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <span className="text-sm font-semibold text-pink-800">姿势：</span>
+                                    <p className="text-sm text-gray-700 mt-1">
+                                      {suggestion.pose}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
