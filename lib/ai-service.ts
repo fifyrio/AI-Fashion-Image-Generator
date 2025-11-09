@@ -185,8 +185,7 @@ export class AIService {
                 model: AI_MODELS.GPT,
                 messages: [{ role: "user", content }],
                 max_tokens: 4000,
-                temperature: 0.7,
-                response_format: { type: "json_object" }
+                temperature: 0.7
             }, {
                 headers: {
                     "HTTP-Referer": openRouterConfig.siteUrl,
@@ -200,7 +199,18 @@ export class AIService {
                 const responseContent = completion.choices[0].message.content;
                 console.log('✅ 响应内容:', responseContent);
 
-                const result = JSON.parse(responseContent);
+                // Extract JSON from response (handle markdown code blocks)
+                let jsonStr = responseContent.trim();
+
+                // Remove markdown code blocks if present
+                const jsonMatch = jsonStr.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+                if (jsonMatch) {
+                    jsonStr = jsonMatch[1];
+                } else if (jsonStr.startsWith('```') && jsonStr.endsWith('```')) {
+                    jsonStr = jsonStr.replace(/```(?:json)?/g, '').trim();
+                }
+
+                const result = JSON.parse(jsonStr);
                 return result;
             }
 
@@ -208,6 +218,12 @@ export class AIService {
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             console.error('🚨 场景姿势分析失败:', errorMessage);
+
+            // Log more error details
+            if (error instanceof Error && 'response' in error) {
+                console.error('🔍 错误详情:', error);
+            }
+
             throw error;
         }
     }
