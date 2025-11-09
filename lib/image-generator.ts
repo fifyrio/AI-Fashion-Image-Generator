@@ -75,6 +75,67 @@ export class ImageGenerator {
         }
     }
 
+    // 根据场景和姿势生成图片（使用 Gemini 2.5 Flash Image）
+    async generateScenePose(
+        originalImageUrl: string,
+        scene: string,
+        pose: string
+    ): Promise<ImageGenerationResult> {
+        const startTime = new Date();
+        const prompt = `模特的服装不变，场景和姿势按照下面的内容改变:
+场景：${scene}
+姿势：${pose}`;
+
+        console.log('🎭 Scene-Pose generation prompt:', prompt);
+
+        const content: OpenAI.Chat.ChatCompletionContentPart[] = [
+            {
+                type: "text",
+                text: prompt
+            },
+            {
+                type: "image_url",
+                image_url: { url: originalImageUrl }
+            }
+        ];
+
+        try {
+            const completion = await this.client.chat.completions.create({
+                model: 'google/gemini-2.5-flash-image',
+                messages: [{ role: "user", content }],
+                max_tokens: 4000,
+                temperature: 0.7
+            }, {
+                headers: {
+                    "HTTP-Referer": openRouterConfig.siteUrl,
+                    "X-Title": openRouterConfig.siteName
+                }
+            });
+
+            console.log('📦 Scene-Pose API response received');
+
+            const result = this.processOpenRouterResponse(completion);
+
+            return {
+                prompt,
+                imageUrl: originalImageUrl,
+                success: true,
+                timestamp: startTime,
+                result: result
+            };
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error('🚨 Scene-Pose generation failed:', errorMessage);
+            return {
+                prompt,
+                imageUrl: originalImageUrl,
+                success: false,
+                error: errorMessage,
+                timestamp: startTime
+            };
+        }
+    }
+
     /**
      * 处理 OpenRouter API 响应，提取图片数据
      */

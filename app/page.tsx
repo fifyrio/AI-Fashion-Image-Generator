@@ -67,12 +67,17 @@ export default function Home() {
   // Scene-Pose tab states
   const [scenePoseFile, setScenePoseFile] = useState<File | null>(null);
   const [scenePosePreview, setScenePosePreview] = useState<string>('');
+  const [scenePoseUploadedUrl, setScenePoseUploadedUrl] = useState<string>('');
   const [scenePoseAnalyzing, setScenePoseAnalyzing] = useState(false);
   const [scenePoseAnalysis, setScenePoseAnalysis] = useState<{
     description: string;
     suggestions: ScenePoseSuggestion[];
   } | null>(null);
   const [scenePoseError, setScenePoseError] = useState<string>('');
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState<number | null>(null);
+  const [scenePoseCharacter, setScenePoseCharacter] = useState<string>(CHARACTER_OPTIONS[0].id);
+  const [scenePoseGenerating, setScenePoseGenerating] = useState(false);
+  const [scenePoseGeneratedImage, setScenePoseGeneratedImage] = useState<string | null>(null);
 
   const clearMockProgressTimers = () => {
     if (progressIntervalRef.current) {
@@ -402,6 +407,7 @@ export default function Home() {
 
       const uploadData = await uploadResponse.json();
       const uploadedUrl = uploadData.uploaded[0].url;
+      setScenePoseUploadedUrl(uploadedUrl);
 
       // Analyze the image
       const analyzeResponse = await fetch('/api/analyze-scene-pose', {
@@ -419,6 +425,8 @@ export default function Home() {
 
       const result = await analyzeResponse.json();
       setScenePoseAnalysis(result);
+      setSelectedSuggestionIndex(null);
+      setScenePoseGeneratedImage(null);
     } catch (error) {
       setScenePoseError(error instanceof Error ? error.message : 'Analysis failed');
     } finally {
@@ -429,8 +437,56 @@ export default function Home() {
   const clearScenePose = () => {
     setScenePoseFile(null);
     setScenePosePreview('');
+    setScenePoseUploadedUrl('');
     setScenePoseAnalysis(null);
     setScenePoseError('');
+    setSelectedSuggestionIndex(null);
+    setScenePoseGeneratedImage(null);
+  };
+
+  const handleScenePoseGenerate = async () => {
+    if (selectedSuggestionIndex === null || !scenePoseAnalysis) {
+      setScenePoseError('请先选择一个场景+姿势建议');
+      return;
+    }
+
+    if (!scenePoseUploadedUrl) {
+      setScenePoseError('图片未上传');
+      return;
+    }
+
+    setScenePoseGenerating(true);
+    setScenePoseError('');
+    setScenePoseGeneratedImage(null);
+
+    try {
+      const selectedSuggestion = scenePoseAnalysis.suggestions[selectedSuggestionIndex];
+
+      const response = await fetch('/api/generate-scene-pose', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          originalImageUrl: scenePoseUploadedUrl,
+          character: scenePoseCharacter,
+          scene: selectedSuggestion.scene,
+          pose: selectedSuggestion.pose,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Generation failed');
+      }
+
+      const result = await response.json();
+      setScenePoseGeneratedImage(result.imageUrl);
+    } catch (error) {
+      setScenePoseError(error instanceof Error ? error.message : 'Generation failed');
+    } finally {
+      setScenePoseGenerating(false);
+    }
   };
 
   return (
@@ -978,15 +1034,29 @@ export default function Home() {
                           </h3>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {scenePoseAnalysis.suggestions.map((suggestion, index) => (
-                              <div
+                              <button
                                 key={index}
-                                className="bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-4 space-y-3"
+                                onClick={() => setSelectedSuggestionIndex(index)}
+                                className={`bg-gradient-to-br from-purple-50 to-pink-50 border-2 rounded-lg p-4 space-y-3 text-left transition-all ${
+                                  selectedSuggestionIndex === index
+                                    ? 'border-purple-500 shadow-lg ring-2 ring-purple-300'
+                                    : 'border-purple-200 hover:border-purple-400'
+                                }`}
                               >
-                                <div className="flex items-center gap-2 mb-2">
-                                  <span className="text-2xl">🎭</span>
-                                  <span className="font-semibold text-purple-900">
-                                    建议 {index + 1}
-                                  </span>
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-2xl">🎭</span>
+                                    <span className="font-semibold text-purple-900">
+                                      建议 {index + 1}
+                                    </span>
+                                  </div>
+                                  {selectedSuggestionIndex === index && (
+                                    <div className="bg-purple-500 rounded-full p-1">
+                                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                      </svg>
+                                    </div>
+                                  )}
                                 </div>
                                 <div className="space-y-2">
                                   <div>
@@ -1002,10 +1072,63 @@ export default function Home() {
                                     </p>
                                   </div>
                                 </div>
-                              </div>
+                              </button>
                             ))}
                           </div>
                         </div>
+
+                        {/* Character Selection and Generate Button */}
+                        {selectedSuggestionIndex !== null && (
+                          <div className="space-y-4 bg-green-50 border border-green-200 rounded-lg p-4">
+                            <div className="space-y-3">
+                              <label className="block">
+                                <span className="text-sm font-semibold text-gray-700">选择模特角色：</span>
+                                <select
+                                  value={scenePoseCharacter}
+                                  onChange={(e) => setScenePoseCharacter(e.target.value)}
+                                  className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 px-4 py-2"
+                                >
+                                  {CHARACTER_OPTIONS.map((opt) => (
+                                    <option key={opt.id} value={opt.id}>
+                                      {opt.label} ({opt.id})
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+
+                              <button
+                                onClick={handleScenePoseGenerate}
+                                disabled={scenePoseGenerating}
+                                className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100"
+                              >
+                                {scenePoseGenerating ? (
+                                  <div className="flex items-center justify-center gap-3">
+                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                                    <span>生成中...</span>
+                                  </div>
+                                ) : (
+                                  '生成图片'
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Generated Image Result */}
+                        {scenePoseGeneratedImage && (
+                          <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4">
+                            <h3 className="text-xl font-semibold text-gray-700 mb-3">生成的图片：</h3>
+                            <div className="relative w-full h-96 bg-gray-100 rounded-lg overflow-hidden">
+                              <Image
+                                src={scenePoseGeneratedImage}
+                                alt="生成的场景+姿势图片"
+                                fill
+                                className="object-contain"
+                                unoptimized
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
