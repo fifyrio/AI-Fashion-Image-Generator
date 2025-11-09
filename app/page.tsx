@@ -14,7 +14,8 @@ interface CharacterOption {
 const CHARACTER_OPTIONS: CharacterOption[] = [
   { id: 'lin', label: 'Lin', image: 'https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/lin/frame_1.jpg' },
   { id: 'Qiao', label: 'Qiao', image: 'https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/Qiao/frame_1.jpg' },
-  { id: 'qiao_mask', label: 'Qiao with Mask', image: 'https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/qiao_mask/frame_1.jpg' }  
+  { id: 'qiao_mask', label: 'Qiao with Mask', image: 'https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/qiao_mask/frame_1.jpg' },
+  { id: 'mature_woman', label: 'Mature Woman', image: 'https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/mature_woman/frame_1.jpg' }
 ];
 
 interface FileWithStatus {

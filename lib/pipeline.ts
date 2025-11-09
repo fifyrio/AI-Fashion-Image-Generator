@@ -21,7 +21,7 @@ import {
   UploadedReference,
 } from './types';
 
-export const VALID_CHARACTERS = ['lin', 'Qiao', 'qiao_mask'] as const;
+export const VALID_CHARACTERS = ['lin', 'Qiao', 'qiao_mask', 'mature_woman'] as const;
 export type Character = (typeof VALID_CHARACTERS)[number];
 
 function getModelBaseUrl(): string {
