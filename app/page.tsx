@@ -44,7 +44,10 @@ type GeneratedImage = {
   character: string;
 };
 
+type TabType = 'outfit-change' | 'scene-pose';
+
 export default function Home() {
+  const [activeTab, setActiveTab] = useState<TabType>('outfit-change');
   const [filesWithStatus, setFilesWithStatus] = useState<FileWithStatus[]>([]);
   const [character, setCharacter] = useState<string>(CHARACTER_OPTIONS[0].id);
   const [generating, setGenerating] = useState(false);
@@ -349,9 +352,45 @@ export default function Home() {
           AI Fashion Image Generator
         </h1>
 
-        <div className="bg-white rounded-lg shadow-lg p-8 space-y-6">
-          {/* File Upload Section */}
-          <div className="space-y-4">
+        {/* Global Header with Tabs */}
+        <div className="bg-white rounded-t-lg shadow-lg">
+          <div className="flex border-b border-gray-200">
+            <button
+              onClick={() => setActiveTab('outfit-change')}
+              className={`flex-1 px-6 py-4 text-lg font-semibold transition-all ${
+                activeTab === 'outfit-change'
+                  ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-xl">👗</span>
+                <span>模特换装</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('scene-pose')}
+              className={`flex-1 px-6 py-4 text-lg font-semibold transition-all ${
+                activeTab === 'scene-pose'
+                  ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-xl">🎭</span>
+                <span>更换场景+姿势</span>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* Tab Content */}
+        <div className="bg-white rounded-b-lg shadow-lg p-8 space-y-6">
+          {/* Outfit Change Tab Content */}
+          {activeTab === 'outfit-change' && (
+            <>
+              {/* File Upload Section */}
+              <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-semibold text-gray-700">
                 1. Select Images ({filesWithStatus.length} files, {uploadedCount} uploaded)
@@ -722,17 +761,41 @@ export default function Home() {
             </div>
           )}
 
-          {/* Info Section */}
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <h3 className="font-semibold text-blue-900 mb-2">How it works:</h3>
-            <ol className="list-decimal list-inside space-y-1 text-sm text-blue-800">
-              <li>Select fashion images - they automatically upload to Cloudflare R2</li>
-              <li>Select a character model (lin, Qiao, qiao_mask)</li>
-              <li>Click Generate to create AI-powered fashion images</li>
-              <li>The service analyzes your reference images and generates new outfits</li>
-              <li>Download generated images with Xiaohongshu-ready titles</li>
-            </ol>
-          </div>
+              {/* Info Section */}
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h3 className="font-semibold text-blue-900 mb-2">How it works:</h3>
+                <ol className="list-decimal list-inside space-y-1 text-sm text-blue-800">
+                  <li>Select fashion images - they automatically upload to Cloudflare R2</li>
+                  <li>Select a character model (lin, Qiao, qiao_mask, mature_woman)</li>
+                  <li>Click Generate to create AI-powered fashion images</li>
+                  <li>The service analyzes your reference images and generates new outfits</li>
+                  <li>Download generated images with Xiaohongshu-ready titles</li>
+                </ol>
+              </div>
+            </>
+          )}
+
+          {/* Scene + Pose Tab Content */}
+          {activeTab === 'scene-pose' && (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="text-center space-y-4">
+                <div className="text-6xl mb-4">🎭</div>
+                <h3 className="text-2xl font-semibold text-gray-700">更换场景+姿势</h3>
+                <p className="text-gray-500 max-w-md">
+                  此功能即将推出，敬请期待！
+                </p>
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-6 mt-6 max-w-md">
+                  <h4 className="font-semibold text-purple-900 mb-3">计划功能：</h4>
+                  <ul className="text-sm text-purple-800 space-y-2 text-left">
+                    <li>• 更换模特的背景场景</li>
+                    <li>• 调整模特的姿势和动作</li>
+                    <li>• 自定义场景参数</li>
+                    <li>• AI 驱动的场景生成</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
