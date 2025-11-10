@@ -90,7 +90,6 @@ export default function Home() {
   } | null>(null);
   const [modelPoseError, setModelPoseError] = useState<string>('');
   const [selectedPoseIndex, setSelectedPoseIndex] = useState<number | null>(null);
-  const [modelPoseCharacter, setModelPoseCharacter] = useState<string>(CHARACTER_OPTIONS[0].id);
   const [modelPoseGenerating, setModelPoseGenerating] = useState(false);
   const [modelPoseGeneratedImage, setModelPoseGeneratedImage] = useState<string | null>(null);
 
@@ -606,7 +605,6 @@ export default function Home() {
         },
         body: JSON.stringify({
           originalImageUrl: modelPoseUploadedUrl,
-          character: modelPoseCharacter,
           pose: selectedPose,
           description: modelPoseAnalysis.description,
         }),
@@ -1437,40 +1435,23 @@ export default function Home() {
                           </div>
                         </div>
 
-                        {/* Character Selection and Generate Button */}
+                        {/* Generate Button */}
                         {selectedPoseIndex !== null && (
-                          <div className="space-y-4 bg-green-50 border border-green-200 rounded-lg p-4">
-                            <div className="space-y-3">
-                              <label className="block">
-                                <span className="text-sm font-semibold text-gray-700">选择模特角色：</span>
-                                <select
-                                  value={modelPoseCharacter}
-                                  onChange={(e) => setModelPoseCharacter(e.target.value)}
-                                  className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 px-4 py-2"
-                                >
-                                  {CHARACTER_OPTIONS.map((opt) => (
-                                    <option key={opt.id} value={opt.id}>
-                                      {opt.label} ({opt.id})
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-
-                              <button
-                                onClick={handleModelPoseGenerate}
-                                disabled={modelPoseGenerating}
-                                className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100"
-                              >
-                                {modelPoseGenerating ? (
-                                  <div className="flex items-center justify-center gap-3">
-                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                                    <span>生成中...</span>
-                                  </div>
-                                ) : (
-                                  '生成图片'
-                                )}
-                              </button>
-                            </div>
+                          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                            <button
+                              onClick={handleModelPoseGenerate}
+                              disabled={modelPoseGenerating}
+                              className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100"
+                            >
+                              {modelPoseGenerating ? (
+                                <div className="flex items-center justify-center gap-3">
+                                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                                  <span>生成中...</span>
+                                </div>
+                              ) : (
+                                '生成图片'
+                              )}
+                            </button>
                           </div>
                         )}
 
