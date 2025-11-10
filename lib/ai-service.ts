@@ -227,4 +227,85 @@ export class AIService {
             throw error;
         }
     }
+
+    // 生成模特姿势列表
+    async generateModelPoseList(imageSource: string): Promise<{
+        description: string;
+        poses: string[];
+    }> {
+        console.log('💃 正在生成模特姿势列表...');
+        console.log('🔧 模型:', AI_MODELS.GPT);
+
+        const prompt = `给我描述这个服装和场景的特征，并给我5个穿着此衣服的模特姿势。
+
+请以JSON格式返回结果，格式如下：
+{
+  "description": "服装和场景的详细描述",
+  "poses": [
+    "姿势1的详细描述",
+    "姿势2的详细描述",
+    "姿势3的详细描述",
+    "姿势4的详细描述",
+    "姿势5的详细描述"
+  ]
+}`;
+
+        const content: OpenAI.Chat.ChatCompletionContentPart[] = [
+            {
+                type: "text",
+                text: prompt
+            },
+            {
+                type: "image_url",
+                image_url: { url: imageSource }
+            }
+        ];
+
+        try {
+            const completion = await this.client.chat.completions.create({
+                model: AI_MODELS.GPT,
+                messages: [{ role: "user", content }],
+                max_tokens: 4000,
+                temperature: 0.7
+            }, {
+                headers: {
+                    "HTTP-Referer": openRouterConfig.siteUrl,
+                    "X-Title": openRouterConfig.siteName
+                }
+            });
+
+            console.log('📦 API完整响应:', JSON.stringify(completion, null, 2));
+
+            if (completion.choices?.[0]?.message?.content) {
+                const responseContent = completion.choices[0].message.content;
+                console.log('✅ 响应内容:', responseContent);
+
+                // Extract JSON from response (handle markdown code blocks)
+                let jsonStr = responseContent.trim();
+
+                // Remove markdown code blocks if present
+                const jsonMatch = jsonStr.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+                if (jsonMatch) {
+                    jsonStr = jsonMatch[1];
+                } else if (jsonStr.startsWith('```') && jsonStr.endsWith('```')) {
+                    jsonStr = jsonStr.replace(/```(?:json)?/g, '').trim();
+                }
+
+                const result = JSON.parse(jsonStr);
+                return result;
+            }
+
+            throw new Error('模特姿势列表生成失败：API响应格式错误或内容为空');
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error('🚨 模特姿势列表生成失败:', errorMessage);
+
+            // Log more error details
+            if (error instanceof Error && 'response' in error) {
+                console.error('🔍 错误详情:', error);
+            }
+
+            throw error;
+        }
+    }
 }

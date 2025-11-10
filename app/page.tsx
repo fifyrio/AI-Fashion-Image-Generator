@@ -44,7 +44,7 @@ type GeneratedImage = {
   character: string;
 };
 
-type TabType = 'outfit-change' | 'scene-pose';
+type TabType = 'outfit-change' | 'scene-pose' | 'model-pose';
 
 interface ScenePoseSuggestion {
   scene: string;
@@ -78,6 +78,17 @@ export default function Home() {
   const [scenePoseCharacter, setScenePoseCharacter] = useState<string>(CHARACTER_OPTIONS[0].id);
   const [scenePoseGenerating, setScenePoseGenerating] = useState(false);
   const [scenePoseGeneratedImage, setScenePoseGeneratedImage] = useState<string | null>(null);
+
+  // Model-Pose tab states
+  const [modelPoseFile, setModelPoseFile] = useState<File | null>(null);
+  const [modelPosePreview, setModelPosePreview] = useState<string>('');
+  const [modelPoseUploadedUrl, setModelPoseUploadedUrl] = useState<string>('');
+  const [modelPoseAnalyzing, setModelPoseAnalyzing] = useState(false);
+  const [modelPoseAnalysis, setModelPoseAnalysis] = useState<{
+    description: string;
+    poses: string[];
+  } | null>(null);
+  const [modelPoseError, setModelPoseError] = useState<string>('');
 
   const clearMockProgressTimers = () => {
     if (progressIntervalRef.current) {
@@ -489,6 +500,81 @@ export default function Home() {
     }
   };
 
+  // Model-Pose tab handlers
+  const handleModelPoseFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setModelPoseFile(file);
+    setModelPoseError('');
+    setModelPoseAnalysis(null);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setModelPosePreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleModelPoseAnalyze = async () => {
+    if (!modelPoseFile) {
+      setModelPoseError('请先选择一张图片');
+      return;
+    }
+
+    setModelPoseAnalyzing(true);
+    setModelPoseError('');
+
+    try {
+      // Upload to R2 first
+      const formData = new FormData();
+      formData.append('files', modelPoseFile);
+
+      const uploadResponse = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error('图片上传失败');
+      }
+
+      const uploadData = await uploadResponse.json();
+      const uploadedUrl = uploadData.uploaded[0].url;
+      setModelPoseUploadedUrl(uploadedUrl);
+
+      // Analyze the image
+      const analyzeResponse = await fetch('/api/generate-pose-list', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ imageUrl: uploadedUrl }),
+      });
+
+      if (!analyzeResponse.ok) {
+        const errorData = await analyzeResponse.json();
+        throw new Error(errorData.error || 'AI 分析失败');
+      }
+
+      const result = await analyzeResponse.json();
+      setModelPoseAnalysis(result);
+    } catch (error) {
+      setModelPoseError(error instanceof Error ? error.message : 'AI 分析失败');
+    } finally {
+      setModelPoseAnalyzing(false);
+    }
+  };
+
+  const clearModelPose = () => {
+    setModelPoseFile(null);
+    setModelPosePreview('');
+    setModelPoseUploadedUrl('');
+    setModelPoseAnalysis(null);
+    setModelPoseError('');
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-8">
       <div className="max-w-6xl mx-auto">
@@ -523,6 +609,19 @@ export default function Home() {
               <div className="flex items-center justify-center gap-2">
                 <span className="text-xl">🎭</span>
                 <span>更换场景+姿势</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('model-pose')}
+              className={`flex-1 px-6 py-4 text-lg font-semibold transition-all ${
+                activeTab === 'model-pose'
+                  ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-xl">💃</span>
+                <span>生成模特姿势</span>
               </div>
             </button>
           </div>
@@ -1129,6 +1228,162 @@ export default function Home() {
                             </div>
                           </div>
                         )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Model-Pose Tab Content */}
+          {activeTab === 'model-pose' && (
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-semibold text-gray-700">
+                    上传图片生成模特姿势列表
+                  </h2>
+                  {modelPoseFile && (
+                    <button
+                      onClick={clearModelPose}
+                      className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white font-medium px-4 py-2 rounded-lg transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      清除
+                    </button>
+                  )}
+                </div>
+
+                {/* Upload Area */}
+                {!modelPoseFile ? (
+                  <label
+                    htmlFor="model-pose-upload"
+                    className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer transition-all border-gray-300 bg-gray-50 hover:bg-gray-100"
+                  >
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                      <svg
+                        className="w-16 h-16 mb-4 text-gray-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                        />
+                      </svg>
+                      <div className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold py-3 px-8 rounded-lg mb-4">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                          </svg>
+                          上传服装图片
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-500">
+                        支持 JPEG、PNG、GIF 格式
+                      </p>
+                    </div>
+                    <input
+                      id="model-pose-upload"
+                      type="file"
+                      className="hidden"
+                      accept="image/*"
+                      onChange={handleModelPoseFileChange}
+                    />
+                  </label>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Image Preview */}
+                    <div className="relative w-full h-96 bg-gray-100 rounded-lg overflow-hidden">
+                      <Image
+                        src={modelPosePreview}
+                        alt="上传的服装图片"
+                        fill
+                        className="object-contain"
+                        unoptimized
+                      />
+                    </div>
+
+                    {/* Analyze Button */}
+                    <button
+                      onClick={handleModelPoseAnalyze}
+                      disabled={modelPoseAnalyzing}
+                      className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100"
+                    >
+                      {modelPoseAnalyzing ? (
+                        <div className="flex items-center justify-center gap-3">
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                          <span>AI 分析中...</span>
+                        </div>
+                      ) : (
+                        '开始 AI 分析'
+                      )}
+                    </button>
+
+                    {/* Error Message */}
+                    {modelPoseError && (
+                      <div className="p-4 rounded-lg bg-red-100 text-red-800">
+                        {modelPoseError}
+                      </div>
+                    )}
+
+                    {/* Analysis Results */}
+                    {modelPoseAnalysis && (
+                      <div className="space-y-4">
+                        {/* Description */}
+                        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
+                          <h3 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                            <span className="text-xl">👔</span>
+                            <span>服装和场景描述：</span>
+                          </h3>
+                          <p className="text-blue-800 whitespace-pre-line">
+                            {modelPoseAnalysis.description}
+                          </p>
+                        </div>
+
+                        {/* Poses List */}
+                        <div className="space-y-3">
+                          <h3 className="text-xl font-semibold text-gray-700 flex items-center gap-2">
+                            <span className="text-2xl">💃</span>
+                            <span>模特姿势建议 ({modelPoseAnalysis.poses.length} 个)</span>
+                          </h3>
+                          <div className="space-y-3">
+                            {modelPoseAnalysis.poses.map((pose, index) => (
+                              <div
+                                key={index}
+                                className="bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200 rounded-lg p-4 hover:border-purple-400 transition-all hover:shadow-md"
+                              >
+                                <div className="flex items-start gap-3">
+                                  <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 text-white rounded-full flex items-center justify-center font-bold">
+                                    {index + 1}
+                                  </div>
+                                  <div className="flex-1">
+                                    <p className="text-sm text-gray-700 leading-relaxed">
+                                      {pose}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Info Box */}
+                        <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4">
+                          <h3 className="font-semibold text-green-900 mb-2 flex items-center gap-2">
+                            <span className="text-xl">💡</span>
+                            <span>使用提示</span>
+                          </h3>
+                          <p className="text-sm text-green-800">
+                            以上姿势由 AI 根据服装特征和场景生成,您可以参考这些姿势描述进行实际拍摄或绘图创作。
+                          </p>
+                        </div>
                       </div>
                     )}
                   </div>
