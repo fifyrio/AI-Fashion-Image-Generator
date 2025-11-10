@@ -89,6 +89,10 @@ export default function Home() {
     poses: string[];
   } | null>(null);
   const [modelPoseError, setModelPoseError] = useState<string>('');
+  const [selectedPoseIndex, setSelectedPoseIndex] = useState<number | null>(null);
+  const [modelPoseCharacter, setModelPoseCharacter] = useState<string>(CHARACTER_OPTIONS[0].id);
+  const [modelPoseGenerating, setModelPoseGenerating] = useState(false);
+  const [modelPoseGeneratedImage, setModelPoseGeneratedImage] = useState<string | null>(null);
 
   const clearMockProgressTimers = () => {
     if (progressIntervalRef.current) {
@@ -573,6 +577,53 @@ export default function Home() {
     setModelPoseUploadedUrl('');
     setModelPoseAnalysis(null);
     setModelPoseError('');
+    setSelectedPoseIndex(null);
+    setModelPoseGeneratedImage(null);
+  };
+
+  const handleModelPoseGenerate = async () => {
+    if (selectedPoseIndex === null || !modelPoseAnalysis) {
+      setModelPoseError('请先选择一个姿势');
+      return;
+    }
+
+    if (!modelPoseUploadedUrl) {
+      setModelPoseError('图片未上传');
+      return;
+    }
+
+    setModelPoseGenerating(true);
+    setModelPoseError('');
+    setModelPoseGeneratedImage(null);
+
+    try {
+      const selectedPose = modelPoseAnalysis.poses[selectedPoseIndex];
+
+      const response = await fetch('/api/generate-model-pose-image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          originalImageUrl: modelPoseUploadedUrl,
+          character: modelPoseCharacter,
+          pose: selectedPose,
+          description: modelPoseAnalysis.description,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Generation failed');
+      }
+
+      const result = await response.json();
+      setModelPoseGeneratedImage(result.imageUrl);
+    } catch (error) {
+      setModelPoseError(error instanceof Error ? error.message : 'Generation failed');
+    } finally {
+      setModelPoseGenerating(false);
+    }
   };
 
   return (
@@ -1351,13 +1402,18 @@ export default function Home() {
                         <div className="space-y-3">
                           <h3 className="text-xl font-semibold text-gray-700 flex items-center gap-2">
                             <span className="text-2xl">💃</span>
-                            <span>模特姿势建议 ({modelPoseAnalysis.poses.length} 个)</span>
+                            <span>模特姿势建议 ({modelPoseAnalysis.poses.length} 个) - 点击选择</span>
                           </h3>
                           <div className="space-y-3">
                             {modelPoseAnalysis.poses.map((pose, index) => (
-                              <div
+                              <button
                                 key={index}
-                                className="bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200 rounded-lg p-4 hover:border-purple-400 transition-all hover:shadow-md"
+                                onClick={() => setSelectedPoseIndex(index)}
+                                className={`w-full bg-gradient-to-br from-purple-50 to-pink-50 border-2 rounded-lg p-4 transition-all text-left ${
+                                  selectedPoseIndex === index
+                                    ? 'border-purple-500 shadow-lg ring-2 ring-purple-300'
+                                    : 'border-purple-200 hover:border-purple-400 hover:shadow-md'
+                                }`}
                               >
                                 <div className="flex items-start gap-3">
                                   <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 text-white rounded-full flex items-center justify-center font-bold">
@@ -1368,22 +1424,71 @@ export default function Home() {
                                       {pose}
                                     </p>
                                   </div>
+                                  {selectedPoseIndex === index && (
+                                    <div className="flex-shrink-0 bg-purple-500 rounded-full p-1">
+                                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                      </svg>
+                                    </div>
+                                  )}
                                 </div>
-                              </div>
+                              </button>
                             ))}
                           </div>
                         </div>
 
-                        {/* Info Box */}
-                        <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4">
-                          <h3 className="font-semibold text-green-900 mb-2 flex items-center gap-2">
-                            <span className="text-xl">💡</span>
-                            <span>使用提示</span>
-                          </h3>
-                          <p className="text-sm text-green-800">
-                            以上姿势由 AI 根据服装特征和场景生成,您可以参考这些姿势描述进行实际拍摄或绘图创作。
-                          </p>
-                        </div>
+                        {/* Character Selection and Generate Button */}
+                        {selectedPoseIndex !== null && (
+                          <div className="space-y-4 bg-green-50 border border-green-200 rounded-lg p-4">
+                            <div className="space-y-3">
+                              <label className="block">
+                                <span className="text-sm font-semibold text-gray-700">选择模特角色：</span>
+                                <select
+                                  value={modelPoseCharacter}
+                                  onChange={(e) => setModelPoseCharacter(e.target.value)}
+                                  className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 px-4 py-2"
+                                >
+                                  {CHARACTER_OPTIONS.map((opt) => (
+                                    <option key={opt.id} value={opt.id}>
+                                      {opt.label} ({opt.id})
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+
+                              <button
+                                onClick={handleModelPoseGenerate}
+                                disabled={modelPoseGenerating}
+                                className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100"
+                              >
+                                {modelPoseGenerating ? (
+                                  <div className="flex items-center justify-center gap-3">
+                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                                    <span>生成中...</span>
+                                  </div>
+                                ) : (
+                                  '生成图片'
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Generated Image Result */}
+                        {modelPoseGeneratedImage && (
+                          <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4">
+                            <h3 className="text-xl font-semibold text-gray-700 mb-3">生成的图片：</h3>
+                            <div className="relative w-full h-96 bg-gray-100 rounded-lg overflow-hidden">
+                              <Image
+                                src={modelPoseGeneratedImage}
+                                alt="生成的模特姿势图片"
+                                fill
+                                className="object-contain"
+                                unoptimized
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

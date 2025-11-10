@@ -136,6 +136,68 @@ export class ImageGenerator {
         }
     }
 
+    // 根据模特姿势生成图片（使用 Gemini 2.5 Flash Image）
+    async generateModelPose(
+        originalImageUrl: string,
+        pose: string,
+        description: string
+    ): Promise<ImageGenerationResult> {
+        const startTime = new Date();
+        const prompt = `保持图片中的服装样式不变（${description}），但是按照下面的姿势要求生成新的模特图片:
+姿势：${pose}
+
+请生成一张符合上述姿势描述的模特图片，确保服装细节与原图一致。`;
+
+        console.log('💃 Model-Pose generation prompt:', prompt);
+
+        const content: OpenAI.Chat.ChatCompletionContentPart[] = [
+            {
+                type: "text",
+                text: prompt
+            },
+            {
+                type: "image_url",
+                image_url: { url: originalImageUrl }
+            }
+        ];
+
+        try {
+            const completion = await this.client.chat.completions.create({
+                model: 'google/gemini-2.5-flash-image',
+                messages: [{ role: "user", content }],
+                max_tokens: 4000,
+                temperature: 0.7
+            }, {
+                headers: {
+                    "HTTP-Referer": openRouterConfig.siteUrl,
+                    "X-Title": openRouterConfig.siteName
+                }
+            });
+
+            console.log('📦 Model-Pose API response received');
+
+            const result = this.processOpenRouterResponse(completion);
+
+            return {
+                prompt,
+                imageUrl: originalImageUrl,
+                success: true,
+                timestamp: startTime,
+                result: result
+            };
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error('🚨 Model-Pose generation failed:', errorMessage);
+            return {
+                prompt,
+                imageUrl: originalImageUrl,
+                success: false,
+                error: errorMessage,
+                timestamp: startTime
+            };
+        }
+    }
+
     /**
      * 处理 OpenRouter API 响应，提取图片数据
      */
