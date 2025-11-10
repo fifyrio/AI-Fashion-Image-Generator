@@ -61,6 +61,7 @@ export default function Home() {
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [mockProgress, setMockProgress] = useState(0);
   const [extractTopOnly, setExtractTopOnly] = useState(false);
+  const [wearMask, setWearMask] = useState(false);
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -338,6 +339,7 @@ export default function Home() {
           character,
           uploads: uploadedFiles.map(f => f.uploadedInfo),
           extractTopOnly,
+          wearMask,
         }),
       });
 
@@ -982,6 +984,31 @@ export default function Home() {
             <h2 className="text-2xl font-semibold text-gray-700">
               3. Generate Images
             </h2>
+
+            {/* Wear Mask Option */}
+            <div className="bg-gradient-to-r from-teal-50 to-cyan-50 rounded-lg p-4 border border-teal-200">
+              <label className="flex items-center cursor-pointer group">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    checked={wearMask}
+                    onChange={(e) => setWearMask(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-teal-500 peer-focus:ring-4 peer-focus:ring-teal-300 transition-all"></div>
+                  <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                </div>
+                <div className="ml-3 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">😷</span>
+                    <span className="font-semibold text-gray-800">模特佩戴白色口罩</span>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-1">
+                    开启后，生成的图片中模特将佩戴白色口罩
+                  </p>
+                </div>
+              </label>
+            </div>
 
             <button
               onClick={handleGenerate}

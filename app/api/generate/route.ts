@@ -13,10 +13,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { character, uploads, extractTopOnly } = body as {
+  const { character, uploads, extractTopOnly, wearMask } = body as {
     character?: string;
     uploads?: UploadedReference[];
     extractTopOnly?: boolean;
+    wearMask?: boolean;
   };
 
   if (!character || !VALID_CHARACTERS.includes(character as (typeof VALID_CHARACTERS)[number])) {
@@ -39,10 +40,11 @@ export async function POST(request: NextRequest) {
     character,
     uploads,
     extractTopOnly: extractTopOnly ?? false,
+    wearMask: wearMask ?? false,
   };
 
   console.log(
-    `[api/generate] Received request for character="${character}" with ${uploads.length} upload(s), extractTopOnly=${extractTopOnly ?? false}`
+    `[api/generate] Received request for character="${character}" with ${uploads.length} upload(s), extractTopOnly=${extractTopOnly ?? false}, wearMask=${wearMask ?? false}`
   );
 
   const { generated, failures } = await runGenerationPipeline(requestPayload);

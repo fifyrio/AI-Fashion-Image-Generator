@@ -230,7 +230,7 @@ export async function runGenerationPipeline(request: GenerationRequest): Promise
   failures: GenerationFailure[];
 }> {
   console.log(
-    `[pipeline] Starting KIE generation for character="${request.character}" with ${request.uploads.length} reference(s), extractTopOnly=${request.extractTopOnly ?? false}`
+    `[pipeline] Starting KIE generation for character="${request.character}" with ${request.uploads.length} reference(s), extractTopOnly=${request.extractTopOnly ?? false}, wearMask=${request.wearMask ?? false}`
   );
   const aiService = new AIService();
   const kieService = new KIEImageService();
@@ -260,7 +260,12 @@ export async function runGenerationPipeline(request: GenerationRequest): Promise
       console.log(`[pipeline] Using model image URL="${modelImageUrl}"`);
 
       // 使用 KIE 创建任务
-      const generationResult = await kieService.generateImageBase64(clothingDetails, modelImageUrl);
+      const generationResult = await kieService.generateImageBase64(
+        clothingDetails,
+        modelImageUrl,
+        request.extractTopOnly ?? false,
+        request.wearMask ?? false
+      );
       if (!generationResult.success || !generationResult.taskId) {
         console.warn(
           `[pipeline] KIE task creation failed for key="${upload.key}" reason="${generationResult.error ?? 'unknown'}"`
@@ -331,7 +336,7 @@ export async function runKIEGenerationPipeline(request: GenerationRequest): Prom
   failures: GenerationFailure[];
 }> {
   console.log(
-    `[kie-pipeline] Starting KIE generation for character="${request.character}" with ${request.uploads.length} reference(s), extractTopOnly=${request.extractTopOnly ?? false}`
+    `[kie-pipeline] Starting KIE generation for character="${request.character}" with ${request.uploads.length} reference(s), extractTopOnly=${request.extractTopOnly ?? false}, wearMask=${request.wearMask ?? false}`
   );
   const aiService = new AIService();
   const kieService = new KIEImageService();
@@ -361,7 +366,12 @@ export async function runKIEGenerationPipeline(request: GenerationRequest): Prom
       console.log(`[kie-pipeline] Using model image URL="${modelImageUrl}"`);
 
       // 创建 KIE 任务（异步，不等待完成）
-      const generationResult = await kieService.generateImageBase64(clothingDetails, modelImageUrl);
+      const generationResult = await kieService.generateImageBase64(
+        clothingDetails,
+        modelImageUrl,
+        request.extractTopOnly ?? false,
+        request.wearMask ?? false
+      );
 
       if (!generationResult.success || !generationResult.taskId) {
         console.warn(

@@ -1,6 +1,6 @@
 import { ImageGenerationResult } from './types';
 import { saveKIETaskMetadata } from './r2';
-import { IMAGE_GENERATION_BASE64_PROMPT } from './prompts';
+import { IMAGE_GENERATION_BASE64_PROMPT, IMAGE_GENERATION_BASE64_TOP_ONLY_PROMPT } from './prompts';
 
 // KIE API 响应类型
 interface KIECreateTaskResponse {
@@ -181,11 +181,15 @@ export class KIEImageService {
      * 只创建任务并返回 taskId，不等待完成
      * @param clothing 服装描述/提示词
      * @param imageUrl 参考图片URL
+     * @param extractTopOnly 是否只提取上装
+     * @param wearMask 是否佩戴白色口罩
      * @returns 包含 taskId 的生成结果
      */
     async generateImageBase64(
         clothing: string,
-        imageUrl: string
+        imageUrl: string,
+        extractTopOnly: boolean = false,
+        wearMask: boolean = false
     ): Promise<ImageGenerationResult & { taskId?: string }> {
         const startTime = new Date();
 
@@ -193,11 +197,22 @@ export class KIEImageService {
             console.log('🚀 Starting KIE image generation (async)...');
             console.log(`📝 Prompt: ${clothing}`);
             console.log(`🖼️  Image URL: ${imageUrl}`);
+            console.log(`👕 Extract Top Only: ${extractTopOnly}`);
+            console.log(`😷 Wear Mask: ${wearMask}`);
 
-            // 创建任务
+            // 根据 extractTopOnly 选择不同的 prompt
+            const basePrompt = extractTopOnly
+                ? IMAGE_GENERATION_BASE64_TOP_ONLY_PROMPT
+                : IMAGE_GENERATION_BASE64_PROMPT;
 
-            const taskId = await this.createTask(`${IMAGE_GENERATION_BASE64_PROMPT}${clothing}`, imageUrl);
-            console.log(`✅ prompts: ${IMAGE_GENERATION_BASE64_PROMPT}${clothing}`);
+            // 如果需要戴口罩，在服装描述后添加口罩要求
+            const clothingWithMask = wearMask
+                ? `${clothing}\n\n特别要求：模特佩戴白色口罩。`
+                : clothing;
+
+            const fullPrompt = `${basePrompt}${clothingWithMask}`;
+            const taskId = await this.createTask(fullPrompt, imageUrl);
+            console.log(`✅ prompts: ${fullPrompt}`);
 
             console.log(`✅ KIE task created: ${taskId}`);
 

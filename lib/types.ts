@@ -63,6 +63,7 @@ export interface GenerationRequest {
     character: string;
     uploads: UploadedReference[];
     extractTopOnly?: boolean;
+    wearMask?: boolean;
 }
 
 // 单张生成结果
