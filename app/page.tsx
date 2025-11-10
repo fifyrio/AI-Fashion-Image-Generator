@@ -598,7 +598,8 @@ export default function Home() {
     try {
       const selectedPose = modelPoseAnalysis.poses[selectedPoseIndex];
 
-      const response = await fetch('/api/generate-model-pose-image', {
+      // 创建 KIE 任务
+      const createResponse = await fetch('/api/generate-model-pose-image', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -610,13 +611,43 @@ export default function Home() {
         }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Generation failed');
+      if (!createResponse.ok) {
+        const errorData = await createResponse.json();
+        throw new Error(errorData.error || 'Task creation failed');
       }
 
-      const result = await response.json();
-      setModelPoseGeneratedImage(result.imageUrl);
+      const { taskId } = await createResponse.json();
+      console.log('Task created:', taskId);
+
+      // 轮询任务状态
+      const maxAttempts = 60; // 最多轮询 60 次
+      const pollInterval = 2000; // 每 2 秒轮询一次
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+        const statusResponse = await fetch(`/api/task-status?taskId=${taskId}`);
+
+        if (!statusResponse.ok) {
+          console.warn('Failed to fetch task status, retrying...');
+          continue;
+        }
+
+        const statusData = await statusResponse.json();
+        console.log(`Task status (attempt ${attempt + 1}):`, statusData.status);
+
+        if (statusData.status === 'completed' && statusData.resultUrls?.[0]) {
+          setModelPoseGeneratedImage(statusData.resultUrls[0]);
+          console.log('✅ Image generation completed');
+          return;
+        }
+
+        if (statusData.status === 'failed') {
+          throw new Error('Image generation failed');
+        }
+      }
+
+      throw new Error('Image generation timeout');
     } catch (error) {
       setModelPoseError(error instanceof Error ? error.message : 'Generation failed');
     } finally {

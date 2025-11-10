@@ -195,7 +195,7 @@ export class KIEImageService {
             console.log(`🖼️  Image URL: ${imageUrl}`);
 
             // 创建任务
-            
+
             const taskId = await this.createTask(`${IMAGE_GENERATION_BASE64_PROMPT}${clothing}`, imageUrl);
             console.log(`✅ prompts: ${IMAGE_GENERATION_BASE64_PROMPT}${clothing}`);
 
@@ -228,6 +228,71 @@ export class KIEImageService {
 
             return {
                 prompt: clothing,
+                imageUrl,
+                success: false,
+                error: errorMessage,
+                timestamp: startTime
+            };
+        }
+    }
+
+    /**
+     * 生成模特姿势图片（异步模式）
+     * @param pose 姿势描述
+     * @param description 服装和场景描述
+     * @param imageUrl 原始图片URL
+     * @returns 包含 taskId 的生成结果
+     */
+    async generateModelPose(
+        pose: string,
+        description: string,
+        imageUrl: string
+    ): Promise<ImageGenerationResult & { taskId?: string }> {
+        const startTime = new Date();
+
+        try {
+            console.log('💃 Starting KIE model pose generation (async)...');
+            console.log(`📝 Pose: ${pose}`);
+            console.log(`📝 Description: ${description}`);
+            console.log(`🖼️  Image URL: ${imageUrl}`);
+
+            // 构建提示词
+            const prompt = `保持图片中的服装样式不变（${description}），但是按照下面的姿势要求生成新的模特图片:
+姿势：${pose}
+
+请生成一张符合上述姿势描述的模特图片，确保服装细节与原图一致。`;
+
+            // 创建任务
+            const taskId = await this.createTask(prompt, imageUrl);
+            console.log(`✅ KIE task created: ${taskId}`);
+
+            // 保存任务元数据到 R2
+            const metadata: KIETaskMetadata = {
+                taskId,
+                status: 'pending',
+                prompt: pose,
+                imageUrl,
+                createdAt: startTime.toISOString(),
+                updatedAt: startTime.toISOString(),
+            };
+
+            await saveKIETaskMetadata(metadata);
+
+            // 返回 taskId，不等待完成
+            return {
+                prompt: pose,
+                imageUrl,
+                success: true,
+                timestamp: startTime,
+                taskId: taskId,
+                result: undefined // 异步模式下，result 通过 callback 获取
+            };
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error(`❌ KIE model pose task creation failed: ${errorMessage}`);
+
+            return {
+                prompt: pose,
                 imageUrl,
                 success: false,
                 error: errorMessage,

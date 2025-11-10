@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ImageGenerator } from '@/lib/image-generator';
-import { uploadBufferToR2, uploadJsonToR2, getPublicUrl } from '@/lib/r2';
+import { KIEImageService } from '@/lib/kie-image-service';
 
 export const maxDuration = 60;
 
@@ -15,64 +14,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('[generate-model-pose-image] Starting generation:', {
+    console.log('[generate-model-pose-image] Starting KIE task creation:', {
       posePreview: pose.substring(0, 100),
       descriptionPreview: description?.substring(0, 100)
     });
 
-    const imageGenerator = new ImageGenerator();
-    const result = await imageGenerator.generateModelPose(
-      originalImageUrl,
+    // 使用 KIE 服务创建异步任务
+    const kieService = new KIEImageService();
+    const result = await kieService.generateModelPose(
       pose,
-      description || ''
+      description || '',
+      originalImageUrl
     );
 
-    if (!result.success || !result.result) {
-      throw new Error(result.error || 'Generation failed');
+    if (!result.success || !result.taskId) {
+      throw new Error(result.error || 'Failed to create KIE task');
     }
 
-    console.log('[generate-model-pose-image] Generation completed, uploading to R2...');
+    console.log('[generate-model-pose-image] KIE task created successfully:', result.taskId);
 
-    // Upload generated image to R2
-    const timestamp = Date.now();
-    const filename = `model-pose-${timestamp}.png`;
-    const key = `generated/model-pose/${filename}`;
-
-    // Convert base64 data URI to buffer
-    let buffer: Buffer;
-    if (result.result.startsWith('data:image/')) {
-      const base64Data = result.result.split(',')[1];
-      buffer = Buffer.from(base64Data, 'base64');
-    } else {
-      throw new Error('Invalid image format returned from API');
-    }
-
-    await uploadBufferToR2({
-      key,
-      body: buffer,
-      contentType: 'image/png'
-    });
-
-    const imageUrl = getPublicUrl(key);
-
-    console.log('[generate-model-pose-image] Upload completed:', imageUrl);
-
-    // Save metadata
-    const metadataKey = `generated/model-pose/${filename}.json`;
-    const metadata = {
-      pose,
-      description,
-      originalImageUrl,
-      generatedImageUrl: imageUrl,
-      timestamp: new Date().toISOString()
-    };
-
-    await uploadJsonToR2(metadataKey, metadata);
-
+    // 返回 taskId，前端可以轮询状态
     return NextResponse.json({
       success: true,
-      imageUrl,
-      metadata
+      taskId: result.taskId,
+      message: 'Task created successfully. Image generation in progress.'
     });
   } catch (error) {
     console.error('[generate-model-pose-image] Error:', error);
