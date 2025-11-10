@@ -6,9 +6,9 @@ export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
-    const { originalImageUrl, character, scene, pose } = await request.json();
+    const { originalImageUrl, scene, pose } = await request.json();
 
-    if (!originalImageUrl || !character || !scene || !pose) {
+    if (!originalImageUrl || !scene || !pose) {
       return NextResponse.json(
         { error: 'Missing required parameters' },
         { status: 400 }
@@ -16,7 +16,6 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('[generate-scene-pose] Starting generation:', {
-      character,
       scenePreview: scene.substring(0, 100),
       posePreview: pose.substring(0, 100)
     });
@@ -36,7 +35,7 @@ export async function POST(request: NextRequest) {
 
     // Upload generated image to R2
     const timestamp = Date.now();
-    const filename = `scene-pose-${character}-${timestamp}.png`;
+    const filename = `scene-pose-${timestamp}.png`;
     const key = `generated/scene-pose/${filename}`;
 
     // Convert base64 data URI to buffer
@@ -61,7 +60,6 @@ export async function POST(request: NextRequest) {
     // Save metadata
     const metadataKey = `generated/scene-pose/${filename}.json`;
     const metadata = {
-      character,
       scene,
       pose,
       originalImageUrl,
