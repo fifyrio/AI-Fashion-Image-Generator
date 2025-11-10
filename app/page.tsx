@@ -91,6 +91,7 @@ export default function Home() {
   const [selectedPoseIndex, setSelectedPoseIndex] = useState<number | null>(null);
   const [modelPoseGenerating, setModelPoseGenerating] = useState(false);
   const [modelPoseGeneratedImage, setModelPoseGeneratedImage] = useState<string | null>(null);
+  const [modelHoldingPhone, setModelHoldingPhone] = useState(false);
 
   const clearMockProgressTimers = () => {
     if (progressIntervalRef.current) {
@@ -606,6 +607,7 @@ export default function Home() {
           originalImageUrl: modelPoseUploadedUrl,
           pose: selectedPose,
           description: modelPoseAnalysis.description,
+          holdingPhone: modelHoldingPhone,
         }),
       });
 
@@ -1369,6 +1371,31 @@ export default function Home() {
                         className="object-contain"
                         unoptimized
                       />
+                    </div>
+
+                    {/* Phone Holding Option */}
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+                      <label className="flex items-center cursor-pointer group">
+                        <div className="relative">
+                          <input
+                            type="checkbox"
+                            checked={modelHoldingPhone}
+                            onChange={(e) => setModelHoldingPhone(e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-blue-500 peer-focus:ring-4 peer-focus:ring-blue-300 transition-all"></div>
+                          <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                        </div>
+                        <div className="ml-3 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">📱</span>
+                            <span className="font-semibold text-gray-800">模特一只手举着手机</span>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-1">
+                            开启后，生成的姿势将包含&ldquo;模特一只手举着手机&rdquo;的动作
+                          </p>
+                        </div>
+                      </label>
                     </div>
 
                     {/* Analyze Button */}
