@@ -1,6 +1,6 @@
 import { ImageGenerationResult } from './types';
 import { saveKIETaskMetadata } from './r2';
-import { IMAGE_GENERATION_BASE64_PROMPT, IMAGE_GENERATION_BASE64_TOP_ONLY_PROMPT, EXTRACT_CLOTHING_PROMPT, OUTFIT_CHANGE_V2_PROMPT } from './prompts';
+import { IMAGE_GENERATION_BASE64_PROMPT, IMAGE_GENERATION_BASE64_TOP_ONLY_PROMPT, EXTRACT_CLOTHING_PROMPT, EXTRACT_CLOTHING_WITH_MATCH_PROMPT, OUTFIT_CHANGE_V2_PROMPT } from './prompts';
 
 // KIE API 响应类型
 interface KIECreateTaskResponse {
@@ -332,19 +332,26 @@ export class KIEImageService {
     /**
      * 提取服装（去除模特）
      * @param imageUrl 原始图片URL
+     * @param recommendMatch 是否推荐搭配的裤子或上衣
      * @returns 包含 taskId 的生成结果
      */
     async extractClothing(
-        imageUrl: string
+        imageUrl: string,
+        recommendMatch: boolean = false
     ): Promise<ImageGenerationResult & { taskId?: string }> {
         const startTime = new Date();
 
         try {
             console.log('👔 Starting KIE clothing extraction (async)...');
             console.log(`🖼️  Image URL: ${imageUrl}`);
+            console.log(`🎯 Recommend Match: ${recommendMatch}`);
 
-            // 使用提取服装的 prompt
-            const prompt = EXTRACT_CLOTHING_PROMPT;
+            // 根据 recommendMatch 选择不同的 prompt
+            const prompt = recommendMatch
+                ? EXTRACT_CLOTHING_WITH_MATCH_PROMPT
+                : EXTRACT_CLOTHING_PROMPT;
+
+            console.log(`📝 Using prompt: ${recommendMatch ? 'WITH_MATCH' : 'STANDARD'}`);
 
             // 创建任务，使用 1:1 的图片比例
             const taskId = await this.createTask(prompt, imageUrl, '1:1');

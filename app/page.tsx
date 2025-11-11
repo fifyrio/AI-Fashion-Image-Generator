@@ -104,6 +104,7 @@ export default function Home() {
   const [outfitV2Generating, setOutfitV2Generating] = useState(false);
   const [outfitV2Error, setOutfitV2Error] = useState<string>('');
   const [outfitV2IsDragging, setOutfitV2IsDragging] = useState(false);
+  const [outfitV2RecommendMatch, setOutfitV2RecommendMatch] = useState(false);
 
   const clearMockProgressTimers = () => {
     if (progressIntervalRef.current) {
@@ -756,7 +757,10 @@ export default function Home() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ imageUrl: uploadedUrl }),
+        body: JSON.stringify({
+          imageUrl: uploadedUrl,
+          recommendMatch: outfitV2RecommendMatch
+        }),
       });
 
       if (!extractResponse.ok) {
@@ -1867,6 +1871,32 @@ export default function Home() {
                           unoptimized
                         />
                       </div>
+
+                      {/* Recommend Match Option */}
+                      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg p-4 border border-indigo-200">
+                        <label className="flex items-center cursor-pointer group">
+                          <div className="relative">
+                            <input
+                              type="checkbox"
+                              checked={outfitV2RecommendMatch}
+                              onChange={(e) => setOutfitV2RecommendMatch(e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-indigo-500 peer-focus:ring-4 peer-focus:ring-indigo-300 transition-all"></div>
+                            <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                          </div>
+                          <div className="ml-3 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">👔👖</span>
+                              <span className="font-semibold text-gray-800">推荐搭配的裤子/上衣</span>
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1">
+                              开启后，AI 会根据提取的服装智能推荐搭配的裤子或上衣
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+
                       <button
                         onClick={handleOutfitV2ExtractClothing}
                         disabled={outfitV2ExtractingClothing || !!outfitV2ExtractedImage}

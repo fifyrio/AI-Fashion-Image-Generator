@@ -12,8 +12,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { imageUrl } = body as {
+  const { imageUrl, recommendMatch } = body as {
     imageUrl?: string;
+    recommendMatch?: boolean;
   };
 
   if (!imageUrl || typeof imageUrl !== 'string') {
@@ -24,11 +25,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  console.log(`[api/extract-clothing] Received request for imageUrl: ${imageUrl}`);
+  console.log(`[api/extract-clothing] Received request for imageUrl: ${imageUrl}, recommendMatch: ${recommendMatch}`);
 
   try {
     const kieService = new KIEImageService();
-    const result = await kieService.extractClothing(imageUrl);
+    const result = await kieService.extractClothing(imageUrl, recommendMatch);
 
     if (!result.success) {
       console.error(`[api/extract-clothing] Task creation failed: ${result.error}`);
