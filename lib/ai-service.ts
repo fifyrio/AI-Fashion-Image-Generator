@@ -156,13 +156,37 @@ export class AIService {
 
         const defaultBoutiqueScene = 'minimalist boutique clothing store interior with modern industrial design, large floor-to-ceiling window showing a rainy city street outside with raindrops on glass, textured concrete wall, dark wooden floor, simple clothing rack with neatly hung neutral-toned clothes, cozy corner by the window with a laptop, magazines, and a cup of latte on the stone ledge, soft natural daylight filtered through rain, calm rainy-day atmosphere, cinematic lighting';
 
-        const prompt = `描述我上传的图片的服装特征，并给我8个穿着此衣服的模特姿势+场景搭配组合，场景和姿势要详细(场景默认有这个'服装店'场景: ${defaultBoutiqueScene})
+        const prompt = `请仔细分析图片中的服装特征，并根据服装的风格、颜色、材质、设计细节等，智能推荐8个最匹配的场景+姿势组合。
+
+**分析要求：**
+1. **服装风格分析**：判断服装属于什么风格（休闲、正式、运动、优雅、街头、复古、轻奢等）
+2. **颜色和材质分析**：分析主色调、材质质感（如丝绸、针织、牛仔、雪纺、皮革等）
+3. **适用场景判断**：根据服装特征判断适合的场合（通勤、约会、度假、聚会、日常、运动等）
+
+**场景推荐原则：**
+- **必须根据服装特征匹配场景**，不要随意推荐：
+  - 正式西装/衬衫 → 办公室、商务会议、咖啡厅、城市街道等正式场景
+  - 休闲T恤/牛仔裤 → 咖啡厅、公园、街头、书店、商场等休闲场景
+  - 运动服/运动装 → 健身房、运动场、公园、户外等运动场景
+  - 连衣裙/优雅装扮 → 花园、海边、咖啡厅、餐厅、美术馆等优雅场景
+  - 街头潮流装 → 城市街头、涂鸦墙、天台、工业风建筑等街头场景
+  - 复古风格 → 复古咖啡厅、老街、书店、艺术画廊等复古场景
+  - 度假装扮 → 海滩、度假村、泳池、热带花园等度假场景
+
+- **场景要多样化但风格统一**：推荐不同场景，但都要符合服装风格
+- **场景描述要详细具体**：包括环境特征、光线、氛围、道具等细节
+- **其中一个场景可以使用默认服装店场景**：${defaultBoutiqueScene}
+
+**姿势推荐原则：**
+- **姿势要与场景协调**：不同场景下的姿势要自然合理
+- **姿势要符合服装风格**：正式装扮姿势优雅端庄，休闲装扮姿势放松随性
+- **姿势要多样化**：包括站姿、坐姿、行走、互动等不同姿势
 
 请以JSON格式返回结果，格式如下：
 {
-  "description": "服装描述",
+  "description": "服装的详细特征分析（风格、颜色、材质、适用场合等）",
   "suggestions": [
-    {"scene": "场景1详细描述", "pose": "姿势1详细描述"},
+    {"scene": "场景1详细描述（根据服装匹配的场景）", "pose": "姿势1详细描述（与场景协调的姿势）"},
     {"scene": "场景2详细描述", "pose": "姿势2详细描述"},
     {"scene": "场景3详细描述", "pose": "姿势3详细描述"},
     {"scene": "场景4详细描述", "pose": "姿势4详细描述"},
@@ -171,7 +195,9 @@ export class AIService {
     {"scene": "场景7详细描述", "pose": "姿势7详细描述"},
     {"scene": "场景8详细描述", "pose": "姿势8详细描述"}
   ]
-}`;
+}
+
+**重要提醒：场景必须与服装风格、颜色、材质高度匹配，不要推荐不相关的场景！**`;
 
         const content: OpenAI.Chat.ChatCompletionContentPart[] = [
             {
