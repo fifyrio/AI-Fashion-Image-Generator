@@ -44,7 +44,7 @@ type GeneratedImage = {
   character: string;
 };
 
-type TabType = 'outfit-change' | 'scene-pose' | 'model-pose' | 'extract-clothing';
+type TabType = 'outfit-change' | 'scene-pose' | 'model-pose' | 'extract-clothing' | 'outfit-change-v2';
 
 interface ScenePoseSuggestion {
   scene: string;
@@ -100,6 +100,16 @@ export default function Home() {
   const [extractClothingGenerating, setExtractClothingGenerating] = useState(false);
   const [extractClothingGeneratedImage, setExtractClothingGeneratedImage] = useState<string | null>(null);
   const [extractClothingError, setExtractClothingError] = useState<string>('');
+
+  // Outfit-Change-V2 tab states
+  const [outfitV2OriginalFile, setOutfitV2OriginalFile] = useState<File | null>(null);
+  const [outfitV2OriginalPreview, setOutfitV2OriginalPreview] = useState<string>('');
+  const [outfitV2ExtractedImage, setOutfitV2ExtractedImage] = useState<string | null>(null);
+  const [outfitV2ExtractingClothing, setOutfitV2ExtractingClothing] = useState(false);
+  const [outfitV2Character, setOutfitV2Character] = useState<string>(CHARACTER_OPTIONS[0].id);
+  const [outfitV2GeneratedImage, setOutfitV2GeneratedImage] = useState<string | null>(null);
+  const [outfitV2Generating, setOutfitV2Generating] = useState(false);
+  const [outfitV2Error, setOutfitV2Error] = useState<string>('');
 
   const clearMockProgressTimers = () => {
     if (progressIntervalRef.current) {
@@ -768,6 +778,179 @@ export default function Home() {
     setExtractClothingError('');
   };
 
+  // Outfit-Change-V2 tab handlers
+  const handleOutfitV2FileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setOutfitV2OriginalFile(file);
+    setOutfitV2Error('');
+    setOutfitV2ExtractedImage(null);
+    setOutfitV2GeneratedImage(null);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setOutfitV2OriginalPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleOutfitV2ExtractClothing = async () => {
+    if (!outfitV2OriginalFile) {
+      setOutfitV2Error('请先上传图片');
+      return;
+    }
+
+    setOutfitV2ExtractingClothing(true);
+    setOutfitV2Error('');
+    setOutfitV2ExtractedImage(null);
+
+    try {
+      // Upload to R2 first
+      const formData = new FormData();
+      formData.append('files', outfitV2OriginalFile);
+
+      const uploadResponse = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error('图片上传失败');
+      }
+
+      const uploadData = await uploadResponse.json();
+      const uploadedUrl = uploadData.uploaded[0].url;
+
+      // Extract clothing using KIE
+      const extractResponse = await fetch('/api/extract-clothing', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ imageUrl: uploadedUrl }),
+      });
+
+      if (!extractResponse.ok) {
+        const errorData = await extractResponse.json();
+        throw new Error(errorData.error || '服装提取失败');
+      }
+
+      const { taskId } = await extractResponse.json();
+      console.log('Extract clothing task created:', taskId);
+
+      // 轮询任务状态
+      const maxAttempts = 60;
+      const pollInterval = 2000;
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+        const statusResponse = await fetch(`/api/task-status?taskId=${taskId}`);
+
+        if (!statusResponse.ok) {
+          console.warn('Failed to fetch task status, retrying...');
+          continue;
+        }
+
+        const statusData = await statusResponse.json();
+        console.log(`Task status (attempt ${attempt + 1}):`, statusData.status);
+
+        if (statusData.status === 'completed' && statusData.resultUrls?.[0]) {
+          setOutfitV2ExtractedImage(statusData.resultUrls[0]);
+          console.log('✅ Clothing extraction completed');
+          return;
+        }
+
+        if (statusData.status === 'failed') {
+          throw new Error('服装提取失败');
+        }
+      }
+
+      throw new Error('服装提取超时');
+    } catch (error) {
+      setOutfitV2Error(error instanceof Error ? error.message : '服装提取失败');
+    } finally {
+      setOutfitV2ExtractingClothing(false);
+    }
+  };
+
+  const handleOutfitV2Generate = async () => {
+    if (!outfitV2ExtractedImage) {
+      setOutfitV2Error('请先提取服装');
+      return;
+    }
+
+    setOutfitV2Generating(true);
+    setOutfitV2Error('');
+    setOutfitV2GeneratedImage(null);
+
+    try {
+      // 调用模特换装V2 API
+      const createResponse = await fetch('/api/outfit-change-v2', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          clothingImageUrl: outfitV2ExtractedImage,
+          character: outfitV2Character,
+        }),
+      });
+
+      if (!createResponse.ok) {
+        const errorData = await createResponse.json();
+        throw new Error(errorData.error || 'Task creation failed');
+      }
+
+      const { taskId } = await createResponse.json();
+      console.log('Outfit change V2 task created:', taskId);
+
+      // 轮询任务状态
+      const maxAttempts = 60;
+      const pollInterval = 2000;
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+        const statusResponse = await fetch(`/api/task-status?taskId=${taskId}`);
+
+        if (!statusResponse.ok) {
+          console.warn('Failed to fetch task status, retrying...');
+          continue;
+        }
+
+        const statusData = await statusResponse.json();
+        console.log(`Task status (attempt ${attempt + 1}):`, statusData.status);
+
+        if (statusData.status === 'completed' && statusData.resultUrls?.[0]) {
+          setOutfitV2GeneratedImage(statusData.resultUrls[0]);
+          console.log('✅ Outfit change V2 completed');
+          return;
+        }
+
+        if (statusData.status === 'failed') {
+          throw new Error('模特换装生成失败');
+        }
+      }
+
+      throw new Error('模特换装生成超时');
+    } catch (error) {
+      setOutfitV2Error(error instanceof Error ? error.message : '模特换装生成失败');
+    } finally {
+      setOutfitV2Generating(false);
+    }
+  };
+
+  const clearOutfitV2 = () => {
+    setOutfitV2OriginalFile(null);
+    setOutfitV2OriginalPreview('');
+    setOutfitV2ExtractedImage(null);
+    setOutfitV2GeneratedImage(null);
+    setOutfitV2Error('');
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-8">
       <div className="max-w-6xl mx-auto">
@@ -828,6 +1011,19 @@ export default function Home() {
               <div className="flex items-center justify-center gap-2">
                 <span className="text-xl">👔</span>
                 <span>提取服装</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('outfit-change-v2')}
+              className={`flex-1 px-6 py-4 text-lg font-semibold transition-all ${
+                activeTab === 'outfit-change-v2'
+                  ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-xl">✨</span>
+                <span>模特换装V2</span>
               </div>
             </button>
           </div>
@@ -1790,6 +1986,254 @@ export default function Home() {
                     )}
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Outfit-Change-V2 Tab Content */}
+          {activeTab === 'outfit-change-v2' && (
+            <div className="space-y-6">
+              {/* Step 1: Upload & Extract Clothing */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-semibold text-gray-700">
+                    步骤 1：上传图片并提取服装
+                  </h2>
+                  {outfitV2OriginalFile && (
+                    <button
+                      onClick={clearOutfitV2}
+                      className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white font-medium px-4 py-2 rounded-lg transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      清除全部
+                    </button>
+                  )}
+                </div>
+
+                {/* Upload Area */}
+                {!outfitV2OriginalFile ? (
+                  <label
+                    htmlFor="outfit-v2-upload"
+                    className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer transition-all border-gray-300 bg-gray-50 hover:bg-gray-100"
+                  >
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                      <svg
+                        className="w-16 h-16 mb-4 text-gray-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                        />
+                      </svg>
+                      <div className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold py-3 px-8 rounded-lg mb-4">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                          </svg>
+                          上传包含人物和服装的图片
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-500">
+                        支持 JPEG、PNG、GIF 格式
+                      </p>
+                    </div>
+                    <input
+                      id="outfit-v2-upload"
+                      type="file"
+                      className="hidden"
+                      accept="image/*"
+                      onChange={handleOutfitV2FileChange}
+                    />
+                  </label>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Original Image */}
+                    <div className="space-y-3">
+                      <h3 className="text-lg font-semibold text-gray-700 flex items-center gap-2">
+                        <span className="text-xl">📸</span>
+                        <span>原始图片</span>
+                      </h3>
+                      <div className="relative w-full h-96 bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200">
+                        <Image
+                          src={outfitV2OriginalPreview}
+                          alt="原始图片"
+                          fill
+                          className="object-contain"
+                          unoptimized
+                        />
+                      </div>
+                      <button
+                        onClick={handleOutfitV2ExtractClothing}
+                        disabled={outfitV2ExtractingClothing || !!outfitV2ExtractedImage}
+                        className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100"
+                      >
+                        {outfitV2ExtractingClothing ? (
+                          <div className="flex items-center justify-center gap-3">
+                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                            <span>AI 提取中...</span>
+                          </div>
+                        ) : outfitV2ExtractedImage ? (
+                          '✅ 提取完成'
+                        ) : (
+                          '提取服装'
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Extracted Clothing */}
+                    {outfitV2ExtractedImage && (
+                      <div className="space-y-3">
+                        <h3 className="text-lg font-semibold text-gray-700 flex items-center gap-2">
+                          <span className="text-xl">👔</span>
+                          <span>提取的服装</span>
+                        </h3>
+                        <div className="relative w-full h-96 bg-gray-100 rounded-lg overflow-hidden border-2 border-green-500">
+                          <Image
+                            src={outfitV2ExtractedImage}
+                            alt="提取的服装"
+                            fill
+                            className="object-contain"
+                            unoptimized
+                          />
+                        </div>
+                        <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                          <p className="text-sm text-green-800 text-center font-medium">
+                            ✅ 服装提取成功，可以继续下一步
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Error Message */}
+                {outfitV2Error && !outfitV2Generating && !outfitV2ExtractingClothing && (
+                  <div className="p-4 rounded-lg bg-red-100 text-red-800">
+                    {outfitV2Error}
+                  </div>
+                )}
+              </div>
+
+              {/* Step 2: Select Model & Generate */}
+              {outfitV2ExtractedImage && (
+                <>
+                  <div className="border-t border-gray-200 pt-6 space-y-4">
+                    <h2 className="text-2xl font-semibold text-gray-700">
+                      步骤 2：选择模特
+                    </h2>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {CHARACTER_OPTIONS.map(({ id, label, image }) => {
+                        const isActive = outfitV2Character === id;
+                        return (
+                          <button
+                            key={id}
+                            onClick={() => setOutfitV2Character(id)}
+                            className={`rounded-xl border-2 transition-all text-left pb-3 ${
+                              isActive
+                                ? 'border-purple-500 bg-purple-50 shadow-lg'
+                                : 'border-transparent bg-gray-100 hover:border-purple-200'
+                            }`}
+                          >
+                            {image && (
+                              <div
+                                className="relative w-full overflow-hidden rounded-t-lg bg-gray-200"
+                                style={{ aspectRatio: '9 / 16' }}
+                              >
+                                <Image
+                                  src={image}
+                                  alt={`Preview of ${label}`}
+                                  fill
+                                  sizes="(min-width: 768px) 25vw, 50vw"
+                                  className="object-cover"
+                                />
+                              </div>
+                            )}
+                            <div className="px-4 pt-3">
+                              <p
+                                className={`text-sm font-semibold tracking-wide ${
+                                  isActive ? 'text-purple-700' : 'text-gray-700'
+                                }`}
+                              >
+                                {label}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-1 break-all">
+                                {id}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="border-t border-gray-200 pt-6 space-y-4">
+                    <h2 className="text-2xl font-semibold text-gray-700">
+                      步骤 3：生成换装图片
+                    </h2>
+
+                    <button
+                      onClick={handleOutfitV2Generate}
+                      disabled={outfitV2Generating}
+                      className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100"
+                    >
+                      {outfitV2Generating ? (
+                        <div className="flex items-center justify-center gap-3">
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                          <span>AI 生成中...</span>
+                        </div>
+                      ) : (
+                        '生成模特换装图片'
+                      )}
+                    </button>
+
+                    {/* Generated Image Result */}
+                    {outfitV2GeneratedImage && (
+                      <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-500 rounded-lg p-6">
+                        <h3 className="text-xl font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                          <span className="text-2xl">✨</span>
+                          <span>生成的换装图片：</span>
+                        </h3>
+                        <div className="relative w-full h-96 bg-gray-100 rounded-lg overflow-hidden">
+                          <Image
+                            src={outfitV2GeneratedImage}
+                            alt="生成的换装图片"
+                            fill
+                            className="object-contain"
+                            unoptimized
+                          />
+                        </div>
+                        <div className="mt-4 bg-white p-4 rounded-lg">
+                          <p className="text-sm text-gray-600 text-center">
+                            ✅ 模特换装完成！服装已成功穿到选定的模特身上
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* Info Section */}
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <h3 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                  <span className="text-lg">ℹ️</span>
+                  <span>工作流程说明：</span>
+                </h3>
+                <ol className="list-decimal list-inside space-y-2 text-sm text-blue-800">
+                  <li>上传一张包含人物和服装的图片</li>
+                  <li>点击&ldquo;提取服装&rdquo;按钮，AI 会自动移除人物，只保留服装</li>
+                  <li>从模特库中选择一个目标模特</li>
+                  <li>点击&ldquo;生成模特换装图片&rdquo;，AI 会将提取的服装穿到选定的模特身上</li>
+                  <li>整个过程使用多图输入技术，确保服装细节和模特特征都得到完整保留</li>
+                </ol>
               </div>
             </div>
           )}

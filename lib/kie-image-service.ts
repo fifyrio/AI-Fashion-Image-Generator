@@ -1,6 +1,6 @@
 import { ImageGenerationResult } from './types';
 import { saveKIETaskMetadata } from './r2';
-import { IMAGE_GENERATION_BASE64_PROMPT, IMAGE_GENERATION_BASE64_TOP_ONLY_PROMPT, EXTRACT_CLOTHING_PROMPT } from './prompts';
+import { IMAGE_GENERATION_BASE64_PROMPT, IMAGE_GENERATION_BASE64_TOP_ONLY_PROMPT, EXTRACT_CLOTHING_PROMPT, OUTFIT_CHANGE_V2_PROMPT } from './prompts';
 
 // KIE API 响应类型
 interface KIECreateTaskResponse {
@@ -44,6 +44,8 @@ export interface KIETaskMetadata {
     status: KIETaskStatus;
     prompt: string;
     imageUrl: string;
+    character?: string;
+    clothingImageUrl?: string; // 用于 outfit-change-v2，存储服装图片URL
     createdAt: string;
     updatedAt: string;
     resultUrls?: string[];
@@ -76,10 +78,13 @@ export class KIEImageService {
     /**
      * 创建 KIE 图片生成任务
      * @param prompt 生成提示词
-     * @param imageUrl 参考图片URL
+     * @param imageUrls 参考图片URL（单个或多个）
      * @returns 任务ID
      */
-    async createTask(prompt: string, imageUrl: string, imageRatio = '9:16'): Promise<string> {
+    async createTask(prompt: string, imageUrls: string | string[], imageRatio: '9:16' | '1:1' = '9:16'): Promise<string> {
+        // 统一转换为数组
+        const urls = Array.isArray(imageUrls) ? imageUrls : [imageUrls];
+
         const response = await fetch(`${this.baseUrl}/createTask`, {
             method: 'POST',
             headers: {
@@ -91,7 +96,7 @@ export class KIEImageService {
                 callBackUrl: this.callbackUrl,
                 input: {
                     prompt: prompt,
-                    image_urls: [imageUrl],
+                    image_urls: urls,
                     output_format: 'png',
                     image_size: imageRatio
                 }
@@ -373,6 +378,77 @@ export class KIEImageService {
             return {
                 prompt: 'Extract Clothing',
                 imageUrl,
+                success: false,
+                error: errorMessage,
+                timestamp: startTime
+            };
+        }
+    }
+
+    /**
+     * 模特换装V2（将提取的服装穿到指定模特身上）
+     * @param clothingImageUrl 提取的服装图片URL
+     * @param modelImageUrl 模特图片URL
+     * @param character 模特角色
+     * @returns 包含 taskId 的生成结果
+     */
+    async outfitChangeV2(
+        clothingImageUrl: string,
+        modelImageUrl: string,
+        character: string
+    ): Promise<ImageGenerationResult & { taskId?: string }> {
+        const startTime = new Date();
+
+        try {
+            console.log('👗 Starting outfit change V2 (async)...');
+            console.log(`👔 Clothing URL: ${clothingImageUrl}`);
+            console.log(`🧍 Model URL: ${modelImageUrl}`);
+            console.log(`🎭 Character: ${character}`);
+
+            // 使用换装V2的 prompt
+            const prompt = OUTFIT_CHANGE_V2_PROMPT;
+
+            // 关键：传递两张图片的URL数组
+            // 第一张：服装图片（what to wear）
+            // 第二张：模特图片（who will wear）
+            const taskId = await this.createTask(
+                prompt,
+                [clothingImageUrl, modelImageUrl],
+                '9:16'
+            );
+
+            console.log(`✅ KIE task created: ${taskId}`);
+
+            // 保存任务元数据到 R2
+            const metadata: KIETaskMetadata = {
+                taskId,
+                status: 'pending',
+                prompt: 'Outfit Change V2',
+                imageUrl: modelImageUrl, // 保存模特URL作为主URL
+                character,
+                clothingImageUrl, // 额外保存服装URL
+                createdAt: startTime.toISOString(),
+                updatedAt: startTime.toISOString(),
+            };
+
+            await saveKIETaskMetadata(metadata);
+
+            // 返回 taskId，不等待完成
+            return {
+                prompt: 'Outfit Change V2',
+                imageUrl: modelImageUrl,
+                success: true,
+                timestamp: startTime,
+                taskId: taskId,
+                result: undefined // 异步模式下，result 通过 callback 获取
+            };
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error(`❌ Outfit change V2 task creation failed: ${errorMessage}`);
+
+            return {
+                prompt: 'Outfit Change V2',
+                imageUrl: modelImageUrl,
                 success: false,
                 error: errorMessage,
                 timestamp: startTime
