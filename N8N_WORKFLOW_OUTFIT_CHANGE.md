@@ -238,7 +238,7 @@ Service: s3
 
 ---
 
-### 4. 获取随机模特图片URL (Function)
+### 4. 获取模特图片URL (Function)
 
 **节点类型**: Function/Code
 
@@ -247,9 +247,8 @@ Service: s3
 const character = $input.item.json.character;
 const modelBaseUrl = $env.R2_MODEL_BASE_URL || $env.R2_PUBLIC_BASE_URL;
 
-// 随机选择1-10之间的frame
-const randomNumber = Math.floor(Math.random() * 10) + 1;
-const modelImageUrl = `${modelBaseUrl}/${character}/frame_${randomNumber}.jpg`;
+// 固定使用 frame_1.jpg
+const modelImageUrl = `${modelBaseUrl}/${character}/frame_1.jpg`;
 
 return {
   json: {

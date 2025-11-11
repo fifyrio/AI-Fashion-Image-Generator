@@ -37,8 +37,8 @@ export function getRandomModelUrl(name: Character): string {
     return `${host}/lin_home_${homeNumber}/frame_1.png`;
   }
 
-  const randomNumber = Math.floor(Math.random() * 10) + 1;
-  return `${host}/${name}/frame_${randomNumber}.jpg`;
+  // 固定使用 frame_1.jpg
+  return `${host}/${name}/frame_1.jpg`;
 }
 
 function getExtensionFromMime(mimeType: string): string {
