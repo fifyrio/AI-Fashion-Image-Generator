@@ -156,7 +156,7 @@ export class AIService {
 
         const defaultBoutiqueScene = 'minimalist boutique clothing store interior with modern industrial design, large floor-to-ceiling window showing a rainy city street outside with raindrops on glass, textured concrete wall, dark wooden floor, simple clothing rack with neatly hung neutral-toned clothes, cozy corner by the window with a laptop, magazines, and a cup of latte on the stone ledge, soft natural daylight filtered through rain, calm rainy-day atmosphere, cinematic lighting';
 
-        const prompt = `描述我上传的图片的服装特征，并给我4个穿着此衣服的模特姿势+场景搭配组合，场景和姿势要详细(场景默认有这个'服装店'场景: ${defaultBoutiqueScene})
+        const prompt = `描述我上传的图片的服装特征，并给我8个穿着此衣服的模特姿势+场景搭配组合，场景和姿势要详细(场景默认有这个'服装店'场景: ${defaultBoutiqueScene})
 
 请以JSON格式返回结果，格式如下：
 {
@@ -165,7 +165,11 @@ export class AIService {
     {"scene": "场景1详细描述", "pose": "姿势1详细描述"},
     {"scene": "场景2详细描述", "pose": "姿势2详细描述"},
     {"scene": "场景3详细描述", "pose": "姿势3详细描述"},
-    {"scene": "场景4详细描述", "pose": "姿势4详细描述"}
+    {"scene": "场景4详细描述", "pose": "姿势4详细描述"},
+    {"scene": "场景5详细描述", "pose": "姿势5详细描述"},
+    {"scene": "场景6详细描述", "pose": "姿势6详细描述"},
+    {"scene": "场景7详细描述", "pose": "姿势7详细描述"},
+    {"scene": "场景8详细描述", "pose": "姿势8详细描述"}
   ]
 }`;
 
@@ -236,7 +240,7 @@ export class AIService {
         console.log('💃 正在生成模特姿势列表...');
         console.log('🔧 模型:', AI_MODELS.GPT);
 
-        const prompt = `给我描述这个服装和场景的特征，并给我5个穿着此衣服的模特姿势。
+        const prompt = `给我描述这个服装和场景的特征，并给我8个穿着此衣服的模特姿势。
 
 请以JSON格式返回结果，格式如下：
 {
@@ -246,7 +250,10 @@ export class AIService {
     "姿势2的详细描述",
     "姿势3的详细描述",
     "姿势4的详细描述",
-    "姿势5的详细描述"
+    "姿势5的详细描述",
+    "姿势6的详细描述",
+    "姿势7的详细描述",
+    "姿势8的详细描述"
   ]
 }`;
 
