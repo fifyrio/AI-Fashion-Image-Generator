@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, ListObjectsV2Command, GetObjectCommand, _Object } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, ListObjectsV2Command, GetObjectCommand, DeleteObjectCommand, _Object } from '@aws-sdk/client-s3';
 import { KIETaskMetadata } from './kie-image-service';
 
 /**
@@ -96,6 +96,22 @@ export async function listObjects(prefix = '', maxKeys = 1000): Promise<_Object[
 
 export function getBucketName(): string {
   return bucketName;
+}
+
+export async function deleteObjectFromR2(key: string): Promise<void> {
+  const command = new DeleteObjectCommand({
+    Bucket: bucketName,
+    Key: key,
+  });
+
+  try {
+    await r2Client.send(command);
+  } catch (error) {
+    if ((error as { name?: string }).name === 'NoSuchKey') {
+      return;
+    }
+    throw error;
+  }
 }
 
 /**

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { runGenerationPipeline, VALID_CHARACTERS } from '@/lib/pipeline';
+import { runGenerationPipeline, CHARACTER_NAME_REGEX } from '@/lib/pipeline';
 import { GenerationRequest, UploadedReference } from '@/lib/types';
+
+const DEFAULT_CHARACTER_ERROR =
+  'Invalid character. Use letters, numbers, and underscores only, or select an existing model.';
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
@@ -20,12 +23,16 @@ export async function POST(request: NextRequest) {
     wearMask?: boolean;
   };
 
-  if (!character || !VALID_CHARACTERS.includes(character as (typeof VALID_CHARACTERS)[number])) {
+  if (typeof character !== 'string') {
+    console.warn('[api/generate] Missing character value');
+    return NextResponse.json({ error: DEFAULT_CHARACTER_ERROR }, { status: 400 });
+  }
+
+  const normalizedCharacter = character.trim();
+
+  if (!normalizedCharacter || !CHARACTER_NAME_REGEX.test(normalizedCharacter)) {
     console.warn('[api/generate] Invalid character provided:', character);
-    return NextResponse.json(
-      { error: 'Invalid character. Supported values: lin, Qiao, qiao_mask' },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: DEFAULT_CHARACTER_ERROR }, { status: 400 });
   }
 
   if (!Array.isArray(uploads) || uploads.length === 0) {
@@ -37,14 +44,14 @@ export async function POST(request: NextRequest) {
   }
 
   const requestPayload: GenerationRequest = {
-    character,
+    character: normalizedCharacter,
     uploads,
     extractTopOnly: extractTopOnly ?? false,
     wearMask: wearMask ?? false,
   };
 
   console.log(
-    `[api/generate] Received request for character="${character}" with ${uploads.length} upload(s), extractTopOnly=${extractTopOnly ?? false}, wearMask=${wearMask ?? false}`
+    `[api/generate] Received request for character="${normalizedCharacter}" with ${uploads.length} upload(s), extractTopOnly=${extractTopOnly ?? false}, wearMask=${wearMask ?? false}`
   );
 
   const { generated, failures } = await runGenerationPipeline(requestPayload);
@@ -61,7 +68,7 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({
     success: failures.length === 0,
-    character,
+    character: normalizedCharacter,
     generated,
     errors: failures.length > 0 ? failures : undefined,
     total: uploads.length,

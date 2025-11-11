@@ -21,24 +21,30 @@ import {
   UploadedReference,
 } from './types';
 
-export const VALID_CHARACTERS = ['lin', 'Qiao', 'qiao_mask', 'mature_woman'] as const;
-export type Character = (typeof VALID_CHARACTERS)[number];
+export const DEFAULT_CHARACTERS = ['lin', 'Qiao', 'qiao_mask', 'mature_woman'] as const;
+export const CHARACTER_NAME_REGEX = /^[a-zA-Z0-9_]+$/;
+export type Character = string;
+
+export function isDefaultCharacter(name: string): boolean {
+  return DEFAULT_CHARACTERS.includes(name as (typeof DEFAULT_CHARACTERS)[number]);
+}
 
 function getModelBaseUrl(): string {
   return process.env.R2_MODEL_BASE_URL || process.env.R2_PUBLIC_BASE_URL || 'https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev';
 }
 
-export function getRandomModelUrl(name: Character): string {
+export function getRandomModelUrl(name: string): string {
   const host = getModelBaseUrl();
+  const normalized = name.trim();
 
-  const linHomeMatch = name.match(/^lin_home_(\d+)$/);
+  const linHomeMatch = normalized.match(/^lin_home_(\d+)$/);
   if (linHomeMatch) {
     const homeNumber = linHomeMatch[1];
     return `${host}/lin_home_${homeNumber}/frame_1.png`;
   }
 
   // 固定使用 frame_1.jpg
-  return `${host}/${name}/frame_1.jpg`;
+  return `${host}/${normalized}/frame_1.jpg`;
 }
 
 function getExtensionFromMime(mimeType: string): string {
@@ -256,7 +262,7 @@ export async function runGenerationPipeline(request: GenerationRequest): Promise
 
       const clothingDetails = analysisResult.analysis;
       console.log(`[pipeline] Analysis succeeded, summary length=${clothingDetails.length}`);
-      const modelImageUrl = getRandomModelUrl(request.character as Character);
+      const modelImageUrl = getRandomModelUrl(request.character);
       console.log(`[pipeline] Using model image URL="${modelImageUrl}"`);
 
       // 使用 KIE 创建任务
@@ -362,7 +368,7 @@ export async function runKIEGenerationPipeline(request: GenerationRequest): Prom
 
       const clothingDetails = analysisResult.analysis;
       console.log(`[kie-pipeline] Analysis succeeded, summary length=${clothingDetails.length}`);
-      const modelImageUrl = getRandomModelUrl(request.character as Character);
+      const modelImageUrl = getRandomModelUrl(request.character);
       console.log(`[kie-pipeline] Using model image URL="${modelImageUrl}"`);
 
       // 创建 KIE 任务（异步，不等待完成）

@@ -9,14 +9,21 @@ interface CharacterOption {
   id: string;
   label: string;
   image?: string;
+  isCustom?: boolean;
 }
 
-const CHARACTER_OPTIONS: CharacterOption[] = [
-  { id: 'lin', label: 'Lin', image: 'https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/lin/frame_1.jpg' },
-  { id: 'Qiao', label: 'Qiao', image: 'https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/Qiao/frame_1.jpg' },
-  { id: 'qiao_mask', label: 'Qiao with Mask', image: 'https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/qiao_mask/frame_1.jpg' },
-  { id: 'mature_woman', label: 'Mature Woman', image: 'https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/mature_woman/frame_1.jpg' }
+const timestamp = Date.now();
+
+const DEFAULT_CHARACTER_OPTIONS: CharacterOption[] = [
+  { id: 'lin', label: 'Lin', image: `https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/lin/frame_1.jpg?v=${timestamp}`, isCustom: false },
+  { id: 'Qiao', label: 'Qiao', image: `https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/Qiao/frame_1.jpg?v=${timestamp}`, isCustom: false },
+  { id: 'qiao_mask', label: 'Qiao with Mask', image: `https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/qiao_mask/frame_1.jpg?v=${timestamp}`, isCustom: false },
+  { id: 'mature_woman', label: 'Mature Woman', image: `https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/mature_woman/frame_1.jpg?v=${timestamp}`, isCustom: false }
 ];
+
+const DEFAULT_CHARACTER_ID = DEFAULT_CHARACTER_OPTIONS[0]?.id ?? 'lin';
+const MODEL_NAME_REGEX = /^[a-zA-Z0-9_]+$/;
+const MAX_MODEL_FILE_SIZE = 10 * 1024 * 1024;
 
 interface FileWithStatus {
   file: File;
@@ -54,7 +61,8 @@ interface ScenePoseSuggestion {
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>('outfit-change');
   const [filesWithStatus, setFilesWithStatus] = useState<FileWithStatus[]>([]);
-  const [character, setCharacter] = useState<string>(CHARACTER_OPTIONS[0].id);
+  const [characterOptions, setCharacterOptions] = useState<CharacterOption[]>(DEFAULT_CHARACTER_OPTIONS);
+  const [character, setCharacter] = useState<string>(DEFAULT_CHARACTER_ID);
   const [generating, setGenerating] = useState(false);
   const [generateStatus, setGenerateStatus] = useState<string>('');
   const [isDragging, setIsDragging] = useState(false);
@@ -62,6 +70,13 @@ export default function Home() {
   const [mockProgress, setMockProgress] = useState(0);
   const [extractTopOnly, setExtractTopOnly] = useState(false);
   const [wearMask, setWearMask] = useState(false);
+  const [showAddModelModal, setShowAddModelModal] = useState(false);
+  const [newModelName, setNewModelName] = useState('');
+  const [newModelFile, setNewModelFile] = useState<File | null>(null);
+  const [newModelPreview, setNewModelPreview] = useState('');
+  const [addingModel, setAddingModel] = useState(false);
+  const [addModelError, setAddModelError] = useState('');
+  const [deletingModelId, setDeletingModelId] = useState<string | null>(null);
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -99,7 +114,7 @@ export default function Home() {
   const [outfitV2OriginalPreview, setOutfitV2OriginalPreview] = useState<string>('');
   const [outfitV2ExtractedImage, setOutfitV2ExtractedImage] = useState<string | null>(null);
   const [outfitV2ExtractingClothing, setOutfitV2ExtractingClothing] = useState(false);
-  const [outfitV2Character, setOutfitV2Character] = useState<string>(CHARACTER_OPTIONS[0].id);
+  const [outfitV2Character, setOutfitV2Character] = useState<string>(DEFAULT_CHARACTER_ID);
   const [outfitV2GeneratedImage, setOutfitV2GeneratedImage] = useState<string | null>(null);
   const [outfitV2Generating, setOutfitV2Generating] = useState(false);
   const [outfitV2Error, setOutfitV2Error] = useState<string>('');
@@ -143,6 +158,210 @@ export default function Home() {
   const resetMockProgress = () => {
     clearMockProgressTimers();
     setMockProgress(0);
+  };
+
+  const resetAddModelForm = () => {
+    setNewModelName('');
+    setNewModelFile(null);
+    setNewModelPreview('');
+    setAddModelError('');
+  };
+
+  const handleOpenAddModelModal = () => {
+    setAddModelError('');
+    setShowAddModelModal(true);
+  };
+
+  const handleCloseAddModelModal = () => {
+    resetAddModelForm();
+    setShowAddModelModal(false);
+  };
+
+  const handleNewModelFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setAddModelError('');
+    const file = e.target.files?.[0] ?? null;
+
+    if (!file) {
+      setNewModelFile(null);
+      setNewModelPreview('');
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setAddModelError('请上传图片文件');
+      setNewModelFile(null);
+      setNewModelPreview('');
+      return;
+    }
+
+    if (file.size > MAX_MODEL_FILE_SIZE) {
+      setAddModelError('图片大小不能超过 10MB');
+      setNewModelFile(null);
+      setNewModelPreview('');
+      return;
+    }
+
+    setNewModelFile(file);
+    setNewModelPreview(URL.createObjectURL(file));
+  };
+
+  const saveCustomModel = (model: CharacterOption) => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      const saved = window.localStorage.getItem('customModels');
+      const parsed: CharacterOption[] = saved ? JSON.parse(saved) : [];
+      const filtered = parsed.filter(item => item.id !== model.id);
+      filtered.push({ ...model, isCustom: true });
+      window.localStorage.setItem('customModels', JSON.stringify(filtered));
+    } catch (error) {
+      console.error('Failed to persist custom model:', error);
+    }
+  };
+
+  const removeCustomModel = (modelId: string) => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      const saved = window.localStorage.getItem('customModels');
+      if (!saved) {
+        return;
+      }
+      const parsed: CharacterOption[] = JSON.parse(saved);
+      const filtered = parsed.filter(item => item.id !== modelId);
+      window.localStorage.setItem('customModels', JSON.stringify(filtered));
+    } catch (error) {
+      console.error('Failed to remove custom model:', error);
+    }
+  };
+
+  const handleAddModel = async () => {
+    const trimmedName = newModelName.trim();
+
+    if (!trimmedName || !newModelFile) {
+      setAddModelError('请填写所有字段');
+      return;
+    }
+
+    if (!MODEL_NAME_REGEX.test(trimmedName)) {
+      setAddModelError('模特名字只能包含字母、数字和下划线');
+      return;
+    }
+
+    if (newModelFile.size > MAX_MODEL_FILE_SIZE) {
+      setAddModelError('图片大小不能超过 10MB');
+      return;
+    }
+
+    if (characterOptions.some(option => option.id === trimmedName)) {
+      setAddModelError('该模特已经存在');
+      return;
+    }
+
+    setAddingModel(true);
+    setAddModelError('');
+
+    try {
+      const formData = new FormData();
+      formData.append('modelName', trimmedName);
+      formData.append('modelImage', newModelFile);
+
+      const response = await fetch('/api/add-model', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || '上传失败');
+      }
+
+      const newModel: CharacterOption = {
+        ...data.model,
+        isCustom: true,
+      };
+
+      setCharacterOptions(prev => {
+        const exists = prev.some(option => option.id === newModel.id);
+        if (exists) {
+          return prev.map(option => (option.id === newModel.id ? newModel : option));
+        }
+        return [...prev, newModel];
+      });
+
+      setCharacter(newModel.id);
+      setOutfitV2Character(newModel.id);
+      saveCustomModel(newModel);
+      setShowAddModelModal(false);
+      resetAddModelForm();
+
+      if (typeof window !== 'undefined') {
+        window.alert('模特添加成功！');
+      }
+    } catch (error) {
+      setAddModelError(error instanceof Error ? error.message : '上传失败');
+    } finally {
+      setAddingModel(false);
+    }
+  };
+
+  const handleDeleteModel = async (modelId: string, label: string) => {
+    if (typeof window !== 'undefined') {
+      const confirmed = window.confirm(`确定要删除模特「${label}」吗？`);
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    setDeletingModelId(modelId);
+
+    try {
+      const response = await fetch('/api/delete-model', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ modelName: modelId }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || '删除失败');
+      }
+
+      setCharacterOptions(prev => {
+        const filtered = prev.filter(option => option.id !== modelId);
+        const fallbackId = filtered[0]?.id ?? DEFAULT_CHARACTER_ID;
+        const hasCharacter = filtered.some(option => option.id === character);
+        const hasOutfitCharacter = filtered.some(option => option.id === outfitV2Character);
+
+        if (!hasCharacter) {
+          setCharacter(fallbackId);
+        }
+
+        if (!hasOutfitCharacter) {
+          setOutfitV2Character(fallbackId);
+        }
+
+        return filtered;
+      });
+
+      removeCustomModel(modelId);
+      if (typeof window !== 'undefined') {
+        window.alert('模特已删除');
+      }
+    } catch (error) {
+      if (typeof window !== 'undefined') {
+        window.alert(error instanceof Error ? error.message : '删除失败');
+      }
+    } finally {
+      setDeletingModelId(null);
+    }
   };
 
   // Auto-upload when files are selected
@@ -321,6 +540,48 @@ export default function Home() {
   useEffect(() => {
     fetchGeneratedImages();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      const saved = window.localStorage.getItem('customModels');
+      if (!saved) {
+        return;
+      }
+
+      const parsed: CharacterOption[] = JSON.parse(saved);
+      if (!Array.isArray(parsed)) {
+        return;
+      }
+
+      setCharacterOptions(prev => {
+        const existingIds = new Set(prev.map(model => model.id));
+        const normalized = parsed
+          .filter(model => model?.id)
+          .map(model => ({
+            ...model,
+            isCustom: true,
+          }));
+        const additions = normalized.filter(model => !existingIds.has(model.id));
+        return additions.length ? [...prev, ...additions] : prev;
+      });
+    } catch (error) {
+      console.error('Failed to load custom models:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!newModelPreview) {
+      return;
+    }
+
+    return () => {
+      URL.revokeObjectURL(newModelPreview);
+    };
+  }, [newModelPreview]);
 
   useEffect(() => {
     return () => {
@@ -885,9 +1146,18 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-8">
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-4xl font-bold text-center mb-8 text-gray-800">
-          AI Fashion Image Generator
-        </h1>
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-8">
+          <h1 className="text-4xl font-bold text-gray-800 text-center md:text-left">
+            AI Fashion Image Generator
+          </h1>
+          <button
+            onClick={handleOpenAddModelModal}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-6 py-3 text-white font-semibold shadow-lg hover:from-purple-500 hover:to-blue-400 transition-colors"
+          >
+            <span className="text-xl">👤</span>
+            添加模特
+          </button>
+        </div>
 
         {/* Global Header with Tabs */}
         <div className="bg-white rounded-t-lg shadow-lg">
@@ -1172,46 +1442,64 @@ export default function Home() {
             </h2>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {CHARACTER_OPTIONS.map(({ id, label, image }) => {
+              {characterOptions.map(({ id, label, image, isCustom }) => {
                 const isActive = character === id;
+                const isDeleting = deletingModelId === id;
                 return (
-                  <button
-                    key={id}
-                    onClick={() => setCharacter(id)}
-                    className={`rounded-xl border-2 transition-all text-left pb-3 ${
-                      isActive
-                        ? 'border-purple-500 bg-purple-50 shadow-lg'
-                        : 'border-transparent bg-gray-100 hover:border-purple-200'
-                    }`}
-                  >
-                    {image && (
-                      <div
-                        className="relative w-full overflow-hidden rounded-t-lg bg-gray-200"
-                        style={{ aspectRatio: '9 / 16' }}
-                      >
-                        <Image
-                          src={image}
-                          alt={`Preview of ${label}`}
-                          fill
-                          sizes="(min-width: 768px) 25vw, 50vw"
-                          className="object-cover"
-                          priority={id === 'ayi'}
-                        />
+                  <div key={id} className="relative">
+                    <button
+                      onClick={() => setCharacter(id)}
+                      className={`w-full rounded-xl border-2 transition-all text-left pb-3 ${
+                        isActive
+                          ? 'border-purple-500 bg-purple-50 shadow-lg'
+                          : 'border-transparent bg-gray-100 hover:border-purple-200'
+                      }`}
+                    >
+                      {image && (
+                        <div
+                          className="relative w-full overflow-hidden rounded-t-lg bg-gray-200"
+                          style={{ aspectRatio: '9 / 16' }}
+                        >
+                          <Image
+                            src={image}
+                            alt={`Preview of ${label}`}
+                            fill
+                            sizes="(min-width: 768px) 25vw, 50vw"
+                            className="object-cover"
+                          />
+                        </div>
+                      )}
+                      <div className="px-4 pt-3">
+                        <p
+                          className={`text-sm font-semibold tracking-wide ${
+                            isActive ? 'text-purple-700' : 'text-gray-700'
+                          }`}
+                        >
+                          {label}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1 break-all">
+                          {id}
+                        </p>
                       </div>
-                    )}
-                    <div className="px-4 pt-3">
-                      <p
-                        className={`text-sm font-semibold tracking-wide ${
-                          isActive ? 'text-purple-700' : 'text-gray-700'
-                        }`}
+                    </button>
+                    {isCustom && (
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleDeleteModel(id, label);
+                        }}
+                        disabled={isDeleting}
+                        className="absolute -top-2 -right-2 rounded-full bg-white p-2 shadow-lg text-gray-500 hover:text-red-600 hover:bg-red-50 disabled:opacity-60"
+                        aria-label={`删除模特 ${label}`}
                       >
-                        {label}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1 break-all">
-                        {id}
-                      </p>
-                    </div>
-                  </button>
+                        {isDeleting ? (
+                          <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-gray-400 border-t-transparent"></span>
+                        ) : (
+                          '🗑️'
+                        )}
+                      </button>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -1958,45 +2246,64 @@ export default function Home() {
                     </h2>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {CHARACTER_OPTIONS.map(({ id, label, image }) => {
+                      {characterOptions.map(({ id, label, image, isCustom }) => {
                         const isActive = outfitV2Character === id;
+                        const isDeleting = deletingModelId === id;
                         return (
-                          <button
-                            key={id}
-                            onClick={() => setOutfitV2Character(id)}
-                            className={`rounded-xl border-2 transition-all text-left pb-3 ${
-                              isActive
-                                ? 'border-purple-500 bg-purple-50 shadow-lg'
-                                : 'border-transparent bg-gray-100 hover:border-purple-200'
-                            }`}
-                          >
-                            {image && (
-                              <div
-                                className="relative w-full overflow-hidden rounded-t-lg bg-gray-200"
-                                style={{ aspectRatio: '9 / 16' }}
-                              >
-                                <Image
-                                  src={image}
-                                  alt={`Preview of ${label}`}
-                                  fill
-                                  sizes="(min-width: 768px) 25vw, 50vw"
-                                  className="object-cover"
-                                />
+                          <div key={id} className="relative">
+                            <button
+                              onClick={() => setOutfitV2Character(id)}
+                              className={`w-full rounded-xl border-2 transition-all text-left pb-3 ${
+                                isActive
+                                  ? 'border-purple-500 bg-purple-50 shadow-lg'
+                                  : 'border-transparent bg-gray-100 hover:border-purple-200'
+                              }`}
+                            >
+                              {image && (
+                                <div
+                                  className="relative w-full overflow-hidden rounded-t-lg bg-gray-200"
+                                  style={{ aspectRatio: '9 / 16' }}
+                                >
+                                  <Image
+                                    src={image}
+                                    alt={`Preview of ${label}`}
+                                    fill
+                                    sizes="(min-width: 768px) 25vw, 50vw"
+                                    className="object-cover"
+                                  />
+                                </div>
+                              )}
+                              <div className="px-4 pt-3">
+                                <p
+                                  className={`text-sm font-semibold tracking-wide ${
+                                    isActive ? 'text-purple-700' : 'text-gray-700'
+                                  }`}
+                                >
+                                  {label}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1 break-all">
+                                  {id}
+                                </p>
                               </div>
-                            )}
-                            <div className="px-4 pt-3">
-                              <p
-                                className={`text-sm font-semibold tracking-wide ${
-                                  isActive ? 'text-purple-700' : 'text-gray-700'
-                                }`}
+                            </button>
+                            {isCustom && (
+                              <button
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleDeleteModel(id, label);
+                                }}
+                                disabled={isDeleting}
+                                className="absolute -top-2 -right-2 rounded-full bg-white p-2 shadow-lg text-gray-500 hover:text-red-600 hover:bg-red-50 disabled:opacity-60"
+                                aria-label={`删除模特 ${label}`}
                               >
-                                {label}
-                              </p>
-                              <p className="text-xs text-gray-500 mt-1 break-all">
-                                {id}
-                              </p>
-                            </div>
-                          </button>
+                                {isDeleting ? (
+                                  <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-gray-400 border-t-transparent"></span>
+                                ) : (
+                                  '🗑️'
+                                )}
+                              </button>
+                            )}
+                          </div>
                         );
                       })}
                     </div>
@@ -2067,6 +2374,98 @@ export default function Home() {
           )}
         </div>
       </div>
+      {showAddModelModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black bg-opacity-60 flex items-center justify-center px-4"
+          onClick={handleCloseAddModelModal}
+        >
+          <div
+            className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 space-y-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-gray-800">添加模特</h2>
+              <button
+                onClick={handleCloseAddModelModal}
+                className="text-gray-500 hover:text-gray-700"
+                aria-label="Close modal"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-gray-700">模特名字</label>
+              <input
+                type="text"
+                value={newModelName}
+                onChange={(e) => setNewModelName(e.target.value)}
+                placeholder="例如：emma, david_chen"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-purple-500 focus:ring-2 focus:ring-purple-300 outline-none"
+              />
+              <p className="text-xs text-gray-500">仅支持字母、数字、下划线；将作为 R2 目录名</p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">模特图片</label>
+              <label
+                htmlFor="add-model-file-input"
+                className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-purple-300 bg-purple-50 px-4 py-3 text-sm font-semibold text-purple-700 cursor-pointer hover:bg-purple-100 transition-colors"
+              >
+                <span className="text-lg">📷</span>
+                {newModelFile ? '重新选择模特图片' : '选择模特图片'}
+              </label>
+              <input
+                id="add-model-file-input"
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+                onChange={handleNewModelFileChange}
+                className="hidden"
+              />
+              <div className="flex items-center justify-between text-xs text-gray-500">
+                <p>支持 JPG/PNG/GIF，最大 10MB</p>
+                {newModelFile && (
+                  <p className="text-gray-600">已选：{newModelFile.name}</p>
+                )}
+              </div>
+
+              {newModelPreview && (
+                <div className="mt-2 rounded-xl border border-gray-200 overflow-hidden relative h-64 w-full">
+                  <Image
+                    src={newModelPreview}
+                    alt="模特预览"
+                    fill
+                    unoptimized
+                    className="object-cover"
+                  />
+                </div>
+              )}
+            </div>
+
+            {addModelError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {addModelError}
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={handleCloseAddModelModal}
+                className="flex-1 rounded-lg border border-gray-200 px-4 py-2 text-gray-700 hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleAddModel}
+                disabled={addingModel}
+                className="flex-1 rounded-lg bg-gradient-to-r from-purple-600 to-blue-500 px-4 py-2 font-semibold text-white shadow-lg hover:from-purple-500 hover:to-blue-400 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {addingModel ? '上传中...' : '确认添加'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
