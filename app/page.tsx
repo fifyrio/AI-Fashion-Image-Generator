@@ -44,7 +44,7 @@ type GeneratedImage = {
   character: string;
 };
 
-type TabType = 'outfit-change' | 'scene-pose' | 'model-pose';
+type TabType = 'outfit-change' | 'scene-pose' | 'model-pose' | 'extract-clothing';
 
 interface ScenePoseSuggestion {
   scene: string;
@@ -93,6 +93,13 @@ export default function Home() {
   const [modelPoseGenerating, setModelPoseGenerating] = useState(false);
   const [modelPoseGeneratedImage, setModelPoseGeneratedImage] = useState<string | null>(null);
   const [modelHoldingPhone, setModelHoldingPhone] = useState(false);
+
+  // Extract-Clothing tab states
+  const [extractClothingFile, setExtractClothingFile] = useState<File | null>(null);
+  const [extractClothingPreview, setExtractClothingPreview] = useState<string>('');
+  const [extractClothingGenerating, setExtractClothingGenerating] = useState(false);
+  const [extractClothingGeneratedImage, setExtractClothingGeneratedImage] = useState<string | null>(null);
+  const [extractClothingError, setExtractClothingError] = useState<string>('');
 
   const clearMockProgressTimers = () => {
     if (progressIntervalRef.current) {
@@ -657,6 +664,110 @@ export default function Home() {
     }
   };
 
+  // Extract-Clothing tab handlers
+  const handleExtractClothingFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setExtractClothingFile(file);
+    setExtractClothingError('');
+    setExtractClothingGeneratedImage(null);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setExtractClothingPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleExtractClothing = async () => {
+    if (!extractClothingFile) {
+      setExtractClothingError('请先上传图片');
+      return;
+    }
+
+    setExtractClothingGenerating(true);
+    setExtractClothingError('');
+    setExtractClothingGeneratedImage(null);
+
+    try {
+      // Upload to R2 first
+      const formData = new FormData();
+      formData.append('files', extractClothingFile);
+
+      const uploadResponse = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error('图片上传失败');
+      }
+
+      const uploadData = await uploadResponse.json();
+      const uploadedUrl = uploadData.uploaded[0].url;
+
+      // Extract clothing using KIE
+      const extractResponse = await fetch('/api/extract-clothing', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ imageUrl: uploadedUrl }),
+      });
+
+      if (!extractResponse.ok) {
+        const errorData = await extractResponse.json();
+        throw new Error(errorData.error || '服装提取失败');
+      }
+
+      const { taskId } = await extractResponse.json();
+      console.log('Extract clothing task created:', taskId);
+
+      // 轮询任务状态
+      const maxAttempts = 60;
+      const pollInterval = 2000;
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+        const statusResponse = await fetch(`/api/task-status?taskId=${taskId}`);
+
+        if (!statusResponse.ok) {
+          console.warn('Failed to fetch task status, retrying...');
+          continue;
+        }
+
+        const statusData = await statusResponse.json();
+        console.log(`Task status (attempt ${attempt + 1}):`, statusData.status);
+
+        if (statusData.status === 'completed' && statusData.resultUrls?.[0]) {
+          setExtractClothingGeneratedImage(statusData.resultUrls[0]);
+          console.log('✅ Clothing extraction completed');
+          return;
+        }
+
+        if (statusData.status === 'failed') {
+          throw new Error('服装提取失败');
+        }
+      }
+
+      throw new Error('服装提取超时');
+    } catch (error) {
+      setExtractClothingError(error instanceof Error ? error.message : '服装提取失败');
+    } finally {
+      setExtractClothingGenerating(false);
+    }
+  };
+
+  const clearExtractClothing = () => {
+    setExtractClothingFile(null);
+    setExtractClothingPreview('');
+    setExtractClothingGeneratedImage(null);
+    setExtractClothingError('');
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-8">
       <div className="max-w-6xl mx-auto">
@@ -704,6 +815,19 @@ export default function Home() {
               <div className="flex items-center justify-center gap-2">
                 <span className="text-xl">💃</span>
                 <span>生成模特姿势</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('extract-clothing')}
+              className={`flex-1 px-6 py-4 text-lg font-semibold transition-all ${
+                activeTab === 'extract-clothing'
+                  ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-xl">👔</span>
+                <span>提取服装</span>
               </div>
             </button>
           </div>
@@ -1536,6 +1660,132 @@ export default function Home() {
                             </div>
                           </div>
                         )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Extract-Clothing Tab Content */}
+          {activeTab === 'extract-clothing' && (
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-semibold text-gray-700">
+                    上传图片提取服装
+                  </h2>
+                  {extractClothingFile && (
+                    <button
+                      onClick={clearExtractClothing}
+                      className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white font-medium px-4 py-2 rounded-lg transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      清除
+                    </button>
+                  )}
+                </div>
+
+                {/* Upload Area */}
+                {!extractClothingFile ? (
+                  <label
+                    htmlFor="extract-clothing-upload"
+                    className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer transition-all border-gray-300 bg-gray-50 hover:bg-gray-100"
+                  >
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                      <svg
+                        className="w-16 h-16 mb-4 text-gray-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                        />
+                      </svg>
+                      <div className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold py-3 px-8 rounded-lg mb-4">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                          </svg>
+                          上传包含模特的图片
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-500">
+                        支持 JPEG、PNG、GIF 格式
+                      </p>
+                    </div>
+                    <input
+                      id="extract-clothing-upload"
+                      type="file"
+                      className="hidden"
+                      accept="image/*"
+                      onChange={handleExtractClothingFileChange}
+                    />
+                  </label>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Image Preview */}
+                    <div className="relative w-full h-96 bg-gray-100 rounded-lg overflow-hidden">
+                      <Image
+                        src={extractClothingPreview}
+                        alt="上传的图片"
+                        fill
+                        className="object-contain"
+                        unoptimized
+                      />
+                    </div>
+
+                    {/* Extract Button */}
+                    <button
+                      onClick={handleExtractClothing}
+                      disabled={extractClothingGenerating}
+                      className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100"
+                    >
+                      {extractClothingGenerating ? (
+                        <div className="flex items-center justify-center gap-3">
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                          <span>AI 提取中...</span>
+                        </div>
+                      ) : (
+                        'AI 提取服装'
+                      )}
+                    </button>
+
+                    {/* Error Message */}
+                    {extractClothingError && (
+                      <div className="p-4 rounded-lg bg-red-100 text-red-800">
+                        {extractClothingError}
+                      </div>
+                    )}
+
+                    {/* Generated Image Result */}
+                    {extractClothingGeneratedImage && (
+                      <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-lg p-4">
+                        <h3 className="text-xl font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                          <span className="text-2xl">✨</span>
+                          <span>提取的服装：</span>
+                        </h3>
+                        <div className="relative w-full h-96 bg-gray-100 rounded-lg overflow-hidden">
+                          <Image
+                            src={extractClothingGeneratedImage}
+                            alt="提取的服装"
+                            fill
+                            className="object-contain"
+                            unoptimized
+                          />
+                        </div>
+                        <div className="mt-4 bg-white p-3 rounded-lg">
+                          <p className="text-sm text-gray-600">
+                            已成功提取服装，模特已被移除
+                          </p>
+                        </div>
                       </div>
                     )}
                   </div>

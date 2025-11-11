@@ -1,6 +1,6 @@
 import { ImageGenerationResult } from './types';
 import { saveKIETaskMetadata } from './r2';
-import { IMAGE_GENERATION_BASE64_PROMPT, IMAGE_GENERATION_BASE64_TOP_ONLY_PROMPT } from './prompts';
+import { IMAGE_GENERATION_BASE64_PROMPT, IMAGE_GENERATION_BASE64_TOP_ONLY_PROMPT, EXTRACT_CLOTHING_PROMPT } from './prompts';
 
 // KIE API 响应类型
 interface KIECreateTaskResponse {
@@ -316,6 +316,62 @@ export class KIEImageService {
 
             return {
                 prompt: pose,
+                imageUrl,
+                success: false,
+                error: errorMessage,
+                timestamp: startTime
+            };
+        }
+    }
+
+    /**
+     * 提取服装（去除模特）
+     * @param imageUrl 原始图片URL
+     * @returns 包含 taskId 的生成结果
+     */
+    async extractClothing(
+        imageUrl: string
+    ): Promise<ImageGenerationResult & { taskId?: string }> {
+        const startTime = new Date();
+
+        try {
+            console.log('👔 Starting KIE clothing extraction (async)...');
+            console.log(`🖼️  Image URL: ${imageUrl}`);
+
+            // 使用提取服装的 prompt
+            const prompt = EXTRACT_CLOTHING_PROMPT;
+
+            // 创建任务，使用 1:1 的图片比例
+            const taskId = await this.createTask(prompt, imageUrl, '1:1');
+            console.log(`✅ KIE task created: ${taskId}`);
+
+            // 保存任务元数据到 R2
+            const metadata: KIETaskMetadata = {
+                taskId,
+                status: 'pending',
+                prompt: 'Extract Clothing',
+                imageUrl,
+                createdAt: startTime.toISOString(),
+                updatedAt: startTime.toISOString(),
+            };
+
+            await saveKIETaskMetadata(metadata);
+
+            // 返回 taskId，不等待完成
+            return {
+                prompt: 'Extract Clothing',
+                imageUrl,
+                success: true,
+                timestamp: startTime,
+                taskId: taskId,
+                result: undefined // 异步模式下，result 通过 callback 获取
+            };
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error(`❌ KIE clothing extraction task creation failed: ${errorMessage}`);
+
+            return {
+                prompt: 'Extract Clothing',
                 imageUrl,
                 success: false,
                 error: errorMessage,
