@@ -103,6 +103,7 @@ export default function Home() {
   const [outfitV2GeneratedImage, setOutfitV2GeneratedImage] = useState<string | null>(null);
   const [outfitV2Generating, setOutfitV2Generating] = useState(false);
   const [outfitV2Error, setOutfitV2Error] = useState<string>('');
+  const [outfitV2IsDragging, setOutfitV2IsDragging] = useState(false);
 
   const clearMockProgressTimers = () => {
     if (progressIntervalRef.current) {
@@ -668,10 +669,7 @@ export default function Home() {
   };
 
   // Outfit-Change-V2 tab handlers
-  const handleOutfitV2FileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const processOutfitV2File = async (file: File) => {
     setOutfitV2OriginalFile(file);
     setOutfitV2Error('');
     setOutfitV2ExtractedImage(null);
@@ -683,6 +681,46 @@ export default function Home() {
       setOutfitV2OriginalPreview(reader.result as string);
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleOutfitV2FileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    processOutfitV2File(file);
+  };
+
+  const handleOutfitV2DragEnter = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setOutfitV2IsDragging(true);
+  };
+
+  const handleOutfitV2DragLeave = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setOutfitV2IsDragging(false);
+  };
+
+  const handleOutfitV2DragOver = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleOutfitV2Drop = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setOutfitV2IsDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      // Check if it's an image file
+      if (file.type.startsWith('image/')) {
+        processOutfitV2File(file);
+      } else {
+        setOutfitV2Error('请上传图片文件（JPEG、PNG、GIF）');
+      }
+    }
   };
 
   const handleOutfitV2ExtractClothing = async () => {
@@ -1766,11 +1804,21 @@ export default function Home() {
                 {!outfitV2OriginalFile ? (
                   <label
                     htmlFor="outfit-v2-upload"
-                    className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer transition-all border-gray-300 bg-gray-50 hover:bg-gray-100"
+                    className={`flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer transition-all ${
+                      outfitV2IsDragging
+                        ? 'border-purple-500 bg-purple-50 scale-105'
+                        : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
+                    }`}
+                    onDragEnter={handleOutfitV2DragEnter}
+                    onDragLeave={handleOutfitV2DragLeave}
+                    onDragOver={handleOutfitV2DragOver}
+                    onDrop={handleOutfitV2Drop}
                   >
                     <div className="flex flex-col items-center justify-center pt-5 pb-6">
                       <svg
-                        className="w-16 h-16 mb-4 text-gray-400"
+                        className={`w-16 h-16 mb-4 transition-colors ${
+                          outfitV2IsDragging ? 'text-purple-500' : 'text-gray-400'
+                        }`}
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
