@@ -12,13 +12,14 @@ interface CharacterOption {
   isCustom?: boolean;
 }
 
-const timestamp = Date.now();
+// Use a fixed version number instead of Date.now() to avoid hydration mismatch
+const IMAGE_VERSION = '1';
 
 const DEFAULT_CHARACTER_OPTIONS: CharacterOption[] = [
-  { id: 'lin', label: 'Lin', image: `https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/lin/frame_1.jpg?v=${timestamp}`, isCustom: false },
-  { id: 'Qiao', label: 'Qiao', image: `https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/Qiao/frame_1.jpg?v=${timestamp}`, isCustom: false },
-  { id: 'qiao_mask', label: 'Qiao with Mask', image: `https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/qiao_mask/frame_1.jpg?v=${timestamp}`, isCustom: false },
-  { id: 'mature_woman', label: 'Mature Woman', image: `https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/mature_woman/frame_1.jpg?v=${timestamp}`, isCustom: false }
+  { id: 'lin', label: 'Lin', image: `https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/lin/frame_1.jpg?v=${IMAGE_VERSION}`, isCustom: false },
+  { id: 'Qiao', label: 'Qiao', image: `https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/Qiao/frame_1.jpg?v=${IMAGE_VERSION}`, isCustom: false },
+  { id: 'qiao_mask', label: 'Qiao with Mask', image: `https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/qiao_mask/frame_1.jpg?v=${IMAGE_VERSION}`, isCustom: false },
+  { id: 'mature_woman', label: 'Mature Woman', image: `https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/mature_woman/frame_1.jpg?v=${IMAGE_VERSION}`, isCustom: false }
 ];
 
 const DEFAULT_CHARACTER_ID = DEFAULT_CHARACTER_OPTIONS[0]?.id ?? 'lin';
@@ -51,7 +52,7 @@ type GeneratedImage = {
   character: string;
 };
 
-type TabType = 'outfit-change' | 'scene-pose' | 'model-pose' | 'outfit-change-v2';
+type TabType = 'outfit-change' | 'scene-pose' | 'model-pose' | 'outfit-change-v2' | 'mimic-reference';
 
 interface ScenePoseSuggestion {
   scene: string;
@@ -120,6 +121,21 @@ export default function Home() {
   const [outfitV2Error, setOutfitV2Error] = useState<string>('');
   const [outfitV2IsDragging, setOutfitV2IsDragging] = useState(false);
   const [outfitV2RecommendMatch, setOutfitV2RecommendMatch] = useState(false);
+
+  // Mimic-Reference tab states
+  const [mimicRefFile, setMimicRefFile] = useState<File | null>(null);
+  const [mimicRefPreview, setMimicRefPreview] = useState<string>('');
+  const [mimicRefUploadedUrl, setMimicRefUploadedUrl] = useState<string>('');
+  const [mimicRefAnalyzing, setMimicRefAnalyzing] = useState(false);
+  const [mimicRefAnalysis, setMimicRefAnalysis] = useState<{
+    sceneDescription: string;
+    poseDescription: string;
+  } | null>(null);
+  const [mimicRefError, setMimicRefError] = useState<string>('');
+  const [mimicRefIsDragging, setMimicRefIsDragging] = useState(false);
+  const [mimicRefCharacter, setMimicRefCharacter] = useState<string>(DEFAULT_CHARACTER_ID);
+  const [mimicRefGenerating, setMimicRefGenerating] = useState(false);
+  const [mimicRefGeneratedImage, setMimicRefGeneratedImage] = useState<string | null>(null);
 
   const clearMockProgressTimers = () => {
     if (progressIntervalRef.current) {
@@ -1143,6 +1159,180 @@ export default function Home() {
     setOutfitV2Error('');
   };
 
+  // Mimic Reference handlers
+  const handleMimicRefFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files[0]) {
+      await processMimicRefFile(files[0]);
+    }
+  };
+
+  const handleMimicRefDragEnter = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    setMimicRefIsDragging(true);
+  };
+
+  const handleMimicRefDragLeave = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    setMimicRefIsDragging(false);
+  };
+
+  const handleMimicRefDragOver = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+  };
+
+  const handleMimicRefDrop = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    setMimicRefIsDragging(false);
+    const files = e.dataTransfer.files;
+    if (files && files[0]) {
+      processMimicRefFile(files[0]);
+    }
+  };
+
+  const processMimicRefFile = async (file: File) => {
+    const preview = URL.createObjectURL(file);
+    setMimicRefFile(file);
+    setMimicRefPreview(preview);
+    setMimicRefAnalysis(null);
+    setMimicRefError('');
+
+    // Upload to R2
+    try {
+      const formData = new FormData();
+      formData.append('files', file);
+
+      const uploadResponse = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error('File upload failed');
+      }
+
+      const uploadData = await uploadResponse.json();
+      if (uploadData.uploaded && uploadData.uploaded[0]) {
+        setMimicRefUploadedUrl(uploadData.uploaded[0].url);
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      setMimicRefError('图片上传失败，请重试');
+    }
+  };
+
+  const handleMimicRefAnalyze = async () => {
+    if (!mimicRefUploadedUrl) {
+      setMimicRefError('请先上传图片');
+      return;
+    }
+
+    setMimicRefAnalyzing(true);
+    setMimicRefError('');
+    setMimicRefAnalysis(null);
+
+    try {
+      const response = await fetch('/api/analyze-mimic-reference', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          imageUrl: mimicRefUploadedUrl,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Analysis failed');
+      }
+
+      const data = await response.json();
+      setMimicRefAnalysis(data);
+    } catch (error) {
+      console.error('Analysis error:', error);
+      setMimicRefError(error instanceof Error ? error.message : '分析失败，请重试');
+    } finally {
+      setMimicRefAnalyzing(false);
+    }
+  };
+
+  const clearMimicRef = () => {
+    setMimicRefFile(null);
+    setMimicRefPreview('');
+    setMimicRefUploadedUrl('');
+    setMimicRefAnalysis(null);
+    setMimicRefError('');
+    setMimicRefGeneratedImage(null);
+  };
+
+  const handleMimicRefGenerate = async () => {
+    if (!mimicRefAnalysis) {
+      setMimicRefError('请先分析参考图片');
+      return;
+    }
+
+    setMimicRefGenerating(true);
+    setMimicRefError('');
+    setMimicRefGeneratedImage(null);
+
+    try {
+      // Combine scene and pose descriptions into a prompt
+      const prompt = `${mimicRefAnalysis.sceneDescription}\n\n${mimicRefAnalysis.poseDescription}`;
+
+      // Call the generation API
+      const createResponse = await fetch('/api/generate-mimic-reference', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt,
+          character: mimicRefCharacter,
+        }),
+      });
+
+      if (!createResponse.ok) {
+        const errorData = await createResponse.json();
+        throw new Error(errorData.error || 'Task creation failed');
+      }
+
+      const { taskId } = await createResponse.json();
+      console.log('Mimic reference generation task created:', taskId);
+
+      // Poll for task status
+      const maxAttempts = 60;
+      const pollInterval = 2000;
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+        const statusResponse = await fetch(`/api/task-status?taskId=${taskId}`);
+
+        if (!statusResponse.ok) {
+          console.warn('Failed to fetch task status, retrying...');
+          continue;
+        }
+
+        const statusData = await statusResponse.json();
+        console.log(`Task status (attempt ${attempt + 1}):`, statusData.status);
+
+        if (statusData.status === 'completed' && statusData.resultUrls?.[0]) {
+          setMimicRefGeneratedImage(statusData.resultUrls[0]);
+          console.log('Generation completed:', statusData.resultUrls[0]);
+          break;
+        } else if (statusData.status === 'failed') {
+          throw new Error('Generation task failed');
+        }
+      }
+    } catch (error) {
+      console.error('Generation error:', error);
+      setMimicRefError(error instanceof Error ? error.message : '生成失败，请重试');
+    } finally {
+      setMimicRefGenerating(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-8">
       <div className="max-w-6xl mx-auto">
@@ -1212,6 +1402,19 @@ export default function Home() {
               <div className="flex items-center justify-center gap-2">
                 <span className="text-xl">✨</span>
                 <span>模特换装V2</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('mimic-reference')}
+              className={`flex-1 px-6 py-4 text-lg font-semibold transition-all ${
+                activeTab === 'mimic-reference'
+                  ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-xl">📸</span>
+                <span>模仿参考图片</span>
               </div>
             </button>
           </div>
@@ -2368,6 +2571,252 @@ export default function Home() {
                   <li>从模特库中选择一个目标模特</li>
                   <li>点击&ldquo;生成模特换装图片&rdquo;，AI 会将提取的服装穿到选定的模特身上</li>
                   <li>整个过程使用多图输入技术，确保服装细节和模特特征都得到完整保留</li>
+                </ol>
+              </div>
+            </div>
+          )}
+
+          {/* Mimic-Reference Tab Content */}
+          {activeTab === 'mimic-reference' && (
+            <div className="space-y-6">
+              {/* Upload Section */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-semibold text-gray-700">
+                    上传参考图片
+                  </h2>
+                  {mimicRefFile && (
+                    <button
+                      onClick={clearMimicRef}
+                      className="text-sm text-red-600 hover:text-red-700 font-medium"
+                    >
+                      🗑️ 清空
+                    </button>
+                  )}
+                </div>
+
+                {/* Upload Area */}
+                <label
+                  onDragEnter={handleMimicRefDragEnter}
+                  onDragLeave={handleMimicRefDragLeave}
+                  onDragOver={handleMimicRefDragOver}
+                  onDrop={handleMimicRefDrop}
+                  className={`flex flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed px-6 py-12 cursor-pointer transition-all ${
+                    mimicRefIsDragging
+                      ? 'border-purple-500 bg-purple-100'
+                      : 'border-gray-300 bg-gray-50 hover:border-purple-400 hover:bg-purple-50'
+                  }`}
+                >
+                  <div className="text-center space-y-2">
+                    <div className="text-5xl">📸</div>
+                    <p className="text-lg font-semibold text-gray-700">
+                      {mimicRefFile ? '重新上传图片' : '上传参考图片'}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      点击选择或拖拽图片到此区域
+                    </p>
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+                    onChange={handleMimicRefFileChange}
+                    className="hidden"
+                  />
+                </label>
+
+                {/* Preview */}
+                {mimicRefPreview && (
+                  <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg p-6 border-2 border-purple-200">
+                    <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                      <span className="text-xl">🖼️</span>
+                      <span>参考图片预览：</span>
+                    </h3>
+                    <div className="relative w-full h-96 bg-gray-100 rounded-lg overflow-hidden">
+                      <Image
+                        src={mimicRefPreview}
+                        alt="参考图片预览"
+                        fill
+                        className="object-contain"
+                        unoptimized
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Analyze Button */}
+                {mimicRefFile && (
+                  <button
+                    onClick={handleMimicRefAnalyze}
+                    disabled={mimicRefAnalyzing || !mimicRefUploadedUrl}
+                    className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 px-6 py-4 text-lg font-semibold text-white shadow-lg hover:from-blue-500 hover:to-purple-500 disabled:opacity-60 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-3"
+                  >
+                    {mimicRefAnalyzing ? (
+                      <div className="flex items-center gap-3">
+                        <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+                        <span>AI 分析中...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="text-xl">🤖</span>
+                        <span>AI 分析场景和姿势</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {/* Error Message */}
+                {mimicRefError && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+                    ⚠️ {mimicRefError}
+                  </div>
+                )}
+
+                {/* Analysis Result */}
+                {mimicRefAnalysis && (
+                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-500 rounded-lg p-6 space-y-6">
+                    <h3 className="text-xl font-semibold text-gray-700 flex items-center gap-2">
+                      <span className="text-2xl">✨</span>
+                      <span>分析结果：</span>
+                    </h3>
+
+                    {/* Scene Description */}
+                    <div className="bg-white rounded-lg p-5 space-y-3">
+                      <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                        <span className="text-xl">🎭</span>
+                        <span>场景描述：</span>
+                      </h4>
+                      <div className="text-gray-700 leading-relaxed whitespace-pre-wrap bg-gray-50 rounded-lg p-4 border border-gray-200">
+                        {mimicRefAnalysis.sceneDescription}
+                      </div>
+                    </div>
+
+                    {/* Pose Description */}
+                    <div className="bg-white rounded-lg p-5 space-y-3">
+                      <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                        <span className="text-xl">💃</span>
+                        <span>姿势描述：</span>
+                      </h4>
+                      <div className="text-gray-700 leading-relaxed whitespace-pre-wrap bg-gray-50 rounded-lg p-4 border border-gray-200">
+                        {mimicRefAnalysis.poseDescription}
+                      </div>
+                    </div>
+
+                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                      <p className="text-sm text-blue-800 text-center">
+                        ✅ 分析完成！您可以使用这些描述在其他工具中重现相似的场景和姿势
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Character Selection and Generate Section */}
+              {mimicRefAnalysis && (
+                <div className="space-y-4">
+                  <h2 className="text-2xl font-semibold text-gray-700">
+                    选择模特并生成图片
+                  </h2>
+
+                  {/* Character Selection */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {characterOptions.map(({ id, label, image }) => {
+                      const isActive = mimicRefCharacter === id;
+                      return (
+                        <div key={id} className="relative">
+                          <button
+                            onClick={() => setMimicRefCharacter(id)}
+                            className={`w-full rounded-xl border-2 transition-all text-left pb-3 ${
+                              isActive
+                                ? 'border-purple-500 bg-purple-50 shadow-lg'
+                                : 'border-transparent bg-gray-100 hover:border-purple-200'
+                            }`}
+                          >
+                            {image && (
+                              <div
+                                className="relative w-full overflow-hidden rounded-t-lg bg-gray-200"
+                                style={{ aspectRatio: '9 / 16' }}
+                              >
+                                <Image
+                                  src={image}
+                                  alt={`Preview of ${label}`}
+                                  fill
+                                  sizes="(min-width: 768px) 25vw, 50vw"
+                                  className="object-cover"
+                                />
+                              </div>
+                            )}
+                            <div className="px-4 pt-3">
+                              <p
+                                className={`text-sm font-semibold tracking-wide ${
+                                  isActive ? 'text-purple-700' : 'text-gray-700'
+                                }`}
+                              >
+                                {label}
+                              </p>
+                            </div>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Generate Button */}
+                  <button
+                    onClick={handleMimicRefGenerate}
+                    disabled={mimicRefGenerating}
+                    className="w-full rounded-xl bg-gradient-to-r from-green-600 to-teal-600 px-6 py-4 text-lg font-semibold text-white shadow-lg hover:from-green-500 hover:to-teal-500 disabled:opacity-60 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-3"
+                  >
+                    {mimicRefGenerating ? (
+                      <div className="flex items-center gap-3">
+                        <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+                        <span>AI 生成中...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="text-xl">✨</span>
+                        <span>生成模特图片</span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Generated Image Result */}
+                  {mimicRefGeneratedImage && (
+                    <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-500 rounded-lg p-6">
+                      <h3 className="text-xl font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                        <span className="text-2xl">🎉</span>
+                        <span>生成的图片：</span>
+                      </h3>
+                      <div className="relative w-full h-96 bg-gray-100 rounded-lg overflow-hidden">
+                        <Image
+                          src={mimicRefGeneratedImage}
+                          alt="生成的图片"
+                          fill
+                          className="object-contain"
+                          unoptimized
+                        />
+                      </div>
+                      <div className="mt-4 bg-white p-4 rounded-lg">
+                        <p className="text-sm text-gray-600 text-center">
+                          ✅ 生成完成！模特已按照参考图片的场景和姿势生成新图片
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Info Section */}
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <h3 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                  <span className="text-lg">ℹ️</span>
+                  <span>功能说明：</span>
+                </h3>
+                <ol className="list-decimal list-inside space-y-2 text-sm text-blue-800">
+                  <li>上传一张包含模特姿势和场景的参考图片</li>
+                  <li>点击&ldquo;AI 分析场景和姿势&rdquo;按钮</li>
+                  <li>AI 会详细分析图片中的场景环境特征（背景、光线、氛围等）</li>
+                  <li>AI 会详细描述模特的姿势和动作细节</li>
+                  <li>您可以使用这些详细描述在图像生成工具中重现相似的场景和姿势</li>
                 </ol>
               </div>
             </div>
