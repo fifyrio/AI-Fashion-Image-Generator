@@ -15,6 +15,8 @@ export class AIService {
         this.client = new OpenAI({
             baseURL: openRouterConfig.baseURL,
             apiKey: openRouterConfig.apiKey,
+            timeout: 60000, // 60 seconds timeout
+            maxRetries: 2, // Retry up to 2 times on network errors
         });
     }
 

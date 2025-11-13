@@ -121,6 +121,7 @@ export default function Home() {
   const [outfitV2Error, setOutfitV2Error] = useState<string>('');
   const [outfitV2IsDragging, setOutfitV2IsDragging] = useState(false);
   const [outfitV2RecommendMatch, setOutfitV2RecommendMatch] = useState(false);
+  const [outfitV2ExtractTopOnly, setOutfitV2ExtractTopOnly] = useState(false);
 
   // Mimic-Reference tab states
   const [mimicRefFile, setMimicRefFile] = useState<File | null>(null);
@@ -1036,7 +1037,8 @@ export default function Home() {
         },
         body: JSON.stringify({
           imageUrl: uploadedUrl,
-          recommendMatch: outfitV2RecommendMatch
+          recommendMatch: outfitV2RecommendMatch,
+          extractTopOnly: outfitV2ExtractTopOnly
         }),
       });
 
@@ -2361,6 +2363,31 @@ export default function Home() {
                           className="object-contain"
                           unoptimized
                         />
+                      </div>
+
+                      {/* Extract Top Only Option */}
+                      <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg p-4 border border-blue-200">
+                        <label className="flex items-center cursor-pointer group">
+                          <div className="relative">
+                            <input
+                              type="checkbox"
+                              checked={outfitV2ExtractTopOnly}
+                              onChange={(e) => setOutfitV2ExtractTopOnly(e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-blue-500 peer-focus:ring-4 peer-focus:ring-blue-300 transition-all"></div>
+                            <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                          </div>
+                          <div className="ml-3 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">🧥</span>
+                              <span className="font-semibold text-gray-800">只提取外套</span>
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1">
+                              开启后，只提取最外层的外套，不包含内搭、下装等（依然去除模特）
+                            </p>
+                          </div>
+                        </label>
                       </div>
 
                       {/* Recommend Match Option */}
