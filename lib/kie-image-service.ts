@@ -85,37 +85,63 @@ export class KIEImageService {
         // 统一转换为数组
         const urls = Array.isArray(imageUrls) ? imageUrls : [imageUrls];
 
-        const response = await fetch(`${this.baseUrl}/createTask`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.apiToken}`
-            },
-            body: JSON.stringify({
-                model: 'google/nano-banana-edit',
-                callBackUrl: this.callbackUrl,
-                input: {
-                    prompt: prompt,
-                    image_urls: urls,
-                    output_format: 'png',
-                    image_size: imageRatio
+        try {
+            console.log(`🔄 Creating KIE task...`);
+            console.log(`📍 API URL: ${this.baseUrl}/createTask`);
+            console.log(`📝 Prompt length: ${prompt.length} chars`);
+            console.log(`🖼️  Image URLs: ${urls.length} image(s)`);
+            console.log(`🔑 Token configured: ${this.apiToken ? 'Yes' : 'No'}`);
+            console.log(`🔗 Callback URL: ${this.callbackUrl || 'Not configured'}`);
+
+            const response = await fetch(`${this.baseUrl}/createTask`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.apiToken}`
+                },
+                body: JSON.stringify({
+                    model: 'google/nano-banana-edit',
+                    callBackUrl: this.callbackUrl,
+                    input: {
+                        prompt: prompt,
+                        image_urls: urls,
+                        output_format: 'png',
+                        image_size: imageRatio
+                    }
+                })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`❌ KIE API HTTP error: ${response.status} ${response.statusText}`);
+                console.error(`❌ Response body: ${errorText}`);
+                throw new Error(`KIE API request failed: ${response.status} ${errorText}`);
+            }
+
+            const result: KIECreateTaskResponse = await response.json();
+
+            if (result.code !== 200) {
+                console.error(`❌ KIE API error code: ${result.code}`);
+                console.error(`❌ KIE API error message: ${result.message}`);
+                throw new Error(`KIE API error: ${result.message}`);
+            }
+
+            console.log(`✅ KIE task created: ${result.data.taskId}`);
+            return result.data.taskId;
+        } catch (error) {
+            // 捕获网络层面的错误（如DNS解析失败、连接超时等）
+            if (error instanceof Error) {
+                console.error(`❌ Network/Fetch error: ${error.message}`);
+                console.error(`❌ Error name: ${error.name}`);
+                console.error(`❌ Error stack: ${error.stack}`);
+
+                // 检查是否是网络连接问题
+                if (error.message === 'fetch failed' || error.name === 'FetchError') {
+                    throw new Error(`Network connection failed. Please check: 1) Internet connectivity, 2) KIE API URL (${this.baseUrl}), 3) Firewall/proxy settings. Original error: ${error.message}`);
                 }
-            })
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`KIE API request failed: ${response.status} ${errorText}`);
+            }
+            throw error;
         }
-
-        const result: KIECreateTaskResponse = await response.json();
-
-        if (result.code !== 200) {
-            throw new Error(`KIE API error: ${result.message}`);
-        }
-
-        console.log(`✅ KIE task created: ${result.data.taskId}`);
-        return result.data.taskId;
     }
 
     /**

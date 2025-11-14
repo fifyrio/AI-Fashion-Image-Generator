@@ -105,9 +105,9 @@ export default function Home() {
     poses: string[];
   } | null>(null);
   const [modelPoseError, setModelPoseError] = useState<string>('');
-  const [selectedPoseIndex, setSelectedPoseIndex] = useState<number | null>(null);
+  const [selectedPoseIndices, setSelectedPoseIndices] = useState<number[]>([]);
   const [modelPoseGenerating, setModelPoseGenerating] = useState(false);
-  const [modelPoseGeneratedImage, setModelPoseGeneratedImage] = useState<string | null>(null);
+  const [modelPoseGeneratedImages, setModelPoseGeneratedImages] = useState<Array<{poseIndex: number, pose: string, imageUrl: string, status: 'generating' | 'completed' | 'failed', error?: string}>>([]);
   const [modelHoldingPhone, setModelHoldingPhone] = useState(false);
   const [modelWearingMask, setModelWearingMask] = useState(false);
 
@@ -871,13 +871,35 @@ export default function Home() {
     setModelPoseUploadedUrl('');
     setModelPoseAnalysis(null);
     setModelPoseError('');
-    setSelectedPoseIndex(null);
-    setModelPoseGeneratedImage(null);
+    setSelectedPoseIndices([]);
+    setModelPoseGeneratedImages([]);
+  };
+
+  // 切换姿势选择状态
+  const togglePoseSelection = (index: number) => {
+    setSelectedPoseIndices(prev => {
+      if (prev.includes(index)) {
+        return prev.filter(i => i !== index);
+      } else {
+        return [...prev, index];
+      }
+    });
+  };
+
+  // 全选/取消全选
+  const toggleSelectAll = () => {
+    if (!modelPoseAnalysis) return;
+
+    if (selectedPoseIndices.length === modelPoseAnalysis.poses.length) {
+      setSelectedPoseIndices([]);
+    } else {
+      setSelectedPoseIndices(modelPoseAnalysis.poses.map((_, index) => index));
+    }
   };
 
   const handleModelPoseGenerate = async () => {
-    if (selectedPoseIndex === null || !modelPoseAnalysis) {
-      setModelPoseError('请先选择一个姿势');
+    if (selectedPoseIndices.length === 0 || !modelPoseAnalysis) {
+      setModelPoseError('请先选择至少一个姿势');
       return;
     }
 
@@ -888,65 +910,109 @@ export default function Home() {
 
     setModelPoseGenerating(true);
     setModelPoseError('');
-    setModelPoseGeneratedImage(null);
+
+    // 初始化生成结果数组
+    const initialResults = selectedPoseIndices.map(index => ({
+      poseIndex: index,
+      pose: modelPoseAnalysis.poses[index],
+      imageUrl: '',
+      status: 'generating' as const,
+    }));
+    setModelPoseGeneratedImages(initialResults);
 
     try {
-      const selectedPose = modelPoseAnalysis.poses[selectedPoseIndex];
+      // 为每个选中的姿势创建任务
+      const tasks = selectedPoseIndices.map(async (poseIndex) => {
+        const selectedPose = modelPoseAnalysis.poses[poseIndex];
 
-      // 创建 KIE 任务
-      const createResponse = await fetch('/api/generate-model-pose-image', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          originalImageUrl: modelPoseUploadedUrl,
-          pose: selectedPose,
-          description: modelPoseAnalysis.description,
-          holdingPhone: modelHoldingPhone,
-          wearingMask: modelWearingMask,
-        }),
+        try {
+          // 创建 KIE 任务
+          const createResponse = await fetch('/api/generate-model-pose-image', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              originalImageUrl: modelPoseUploadedUrl,
+              pose: selectedPose,
+              description: modelPoseAnalysis.description,
+              holdingPhone: modelHoldingPhone,
+              wearingMask: modelWearingMask,
+            }),
+          });
+
+          if (!createResponse.ok) {
+            const errorData = await createResponse.json();
+            throw new Error(errorData.error || 'Task creation failed');
+          }
+
+          const { taskId } = await createResponse.json();
+          console.log(`Task created for pose ${poseIndex}:`, taskId);
+
+          // 轮询任务状态
+          const maxAttempts = 60;
+          const pollInterval = 2000;
+
+          for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+            const statusResponse = await fetch(`/api/task-status?taskId=${taskId}`);
+
+            if (!statusResponse.ok) {
+              console.warn('Failed to fetch task status, retrying...');
+              continue;
+            }
+
+            const statusData = await statusResponse.json();
+            console.log(`Task status for pose ${poseIndex} (attempt ${attempt + 1}):`, statusData.status);
+
+            if (statusData.status === 'completed' && statusData.resultUrls?.[0]) {
+              // 更新该姿势的生成结果
+              setModelPoseGeneratedImages(prev =>
+                prev.map(item =>
+                  item.poseIndex === poseIndex
+                    ? { ...item, imageUrl: statusData.resultUrls[0], status: 'completed' as const }
+                    : item
+                )
+              );
+              console.log(`✅ Image generation completed for pose ${poseIndex}`);
+              return { poseIndex, success: true, imageUrl: statusData.resultUrls[0] };
+            }
+
+            if (statusData.status === 'failed') {
+              throw new Error('Image generation failed');
+            }
+          }
+
+          throw new Error('Image generation timeout');
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Generation failed';
+          console.error(`❌ Error generating pose ${poseIndex}:`, errorMessage);
+
+          // 更新该姿势的失败状态
+          setModelPoseGeneratedImages(prev =>
+            prev.map(item =>
+              item.poseIndex === poseIndex
+                ? { ...item, status: 'failed' as const, error: errorMessage }
+                : item
+            )
+          );
+          return { poseIndex, success: false, error: errorMessage };
+        }
       });
 
-      if (!createResponse.ok) {
-        const errorData = await createResponse.json();
-        throw new Error(errorData.error || 'Task creation failed');
+      // 等待所有任务完成
+      const results = await Promise.all(tasks);
+      const successCount = results.filter(r => r.success).length;
+      const failCount = results.filter(r => !r.success).length;
+
+      if (failCount > 0) {
+        setModelPoseError(`批量生成完成：${successCount} 个成功，${failCount} 个失败`);
       }
 
-      const { taskId } = await createResponse.json();
-      console.log('Task created:', taskId);
-
-      // 轮询任务状态
-      const maxAttempts = 60; // 最多轮询 60 次
-      const pollInterval = 2000; // 每 2 秒轮询一次
-
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
-
-        const statusResponse = await fetch(`/api/task-status?taskId=${taskId}`);
-
-        if (!statusResponse.ok) {
-          console.warn('Failed to fetch task status, retrying...');
-          continue;
-        }
-
-        const statusData = await statusResponse.json();
-        console.log(`Task status (attempt ${attempt + 1}):`, statusData.status);
-
-        if (statusData.status === 'completed' && statusData.resultUrls?.[0]) {
-          setModelPoseGeneratedImage(statusData.resultUrls[0]);
-          console.log('✅ Image generation completed');
-          return;
-        }
-
-        if (statusData.status === 'failed') {
-          throw new Error('Image generation failed');
-        }
-      }
-
-      throw new Error('Image generation timeout');
+      console.log('✅ Batch generation completed:', { successCount, failCount });
     } catch (error) {
-      setModelPoseError(error instanceof Error ? error.message : 'Generation failed');
+      setModelPoseError(error instanceof Error ? error.message : 'Batch generation failed');
     } finally {
       setModelPoseGenerating(false);
     }
@@ -2225,45 +2291,62 @@ export default function Home() {
 
                         {/* Poses List */}
                         <div className="space-y-3">
-                          <h3 className="text-xl font-semibold text-gray-700 flex items-center gap-2">
-                            <span className="text-2xl">💃</span>
-                            <span>模特姿势建议 ({modelPoseAnalysis.poses.length} 个) - 点击选择</span>
-                          </h3>
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-xl font-semibold text-gray-700 flex items-center gap-2">
+                              <span className="text-2xl">💃</span>
+                              <span>模特姿势建议 ({modelPoseAnalysis.poses.length} 个) - 多选批量生成</span>
+                            </h3>
+                            <button
+                              onClick={toggleSelectAll}
+                              className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold rounded-lg transition-all text-sm"
+                            >
+                              {selectedPoseIndices.length === modelPoseAnalysis.poses.length ? '取消全选' : '全选'}
+                            </button>
+                          </div>
+                          {selectedPoseIndices.length > 0 && (
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                              <p className="text-blue-800 text-sm font-medium">
+                                已选择 {selectedPoseIndices.length} 个姿势
+                              </p>
+                            </div>
+                          )}
                           <div className="space-y-3">
                             {modelPoseAnalysis.poses.map((pose, index) => (
-                              <button
+                              <div
                                 key={index}
-                                onClick={() => setSelectedPoseIndex(index)}
-                                className={`w-full bg-gradient-to-br from-purple-50 to-pink-50 border-2 rounded-lg p-4 transition-all text-left ${
-                                  selectedPoseIndex === index
+                                onClick={() => togglePoseSelection(index)}
+                                className={`w-full bg-gradient-to-br from-purple-50 to-pink-50 border-2 rounded-lg p-4 transition-all cursor-pointer ${
+                                  selectedPoseIndices.includes(index)
                                     ? 'border-purple-500 shadow-lg ring-2 ring-purple-300'
                                     : 'border-purple-200 hover:border-purple-400 hover:shadow-md'
                                 }`}
                               >
                                 <div className="flex items-start gap-3">
-                                  <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 text-white rounded-full flex items-center justify-center font-bold">
-                                    {index + 1}
+                                  <div className="flex-shrink-0 flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedPoseIndices.includes(index)}
+                                      onChange={() => togglePoseSelection(index)}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="w-5 h-5 text-purple-600 bg-white border-gray-300 rounded focus:ring-purple-500 cursor-pointer"
+                                    />
+                                    <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 text-white rounded-full flex items-center justify-center font-bold text-sm">
+                                      {index + 1}
+                                    </div>
                                   </div>
                                   <div className="flex-1">
                                     <p className="text-sm text-gray-700 leading-relaxed">
                                       {pose}
                                     </p>
                                   </div>
-                                  {selectedPoseIndex === index && (
-                                    <div className="flex-shrink-0 bg-purple-500 rounded-full p-1">
-                                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                      </svg>
-                                    </div>
-                                  )}
                                 </div>
-                              </button>
+                              </div>
                             ))}
                           </div>
                         </div>
 
                         {/* Generate Button */}
-                        {selectedPoseIndex !== null && (
+                        {selectedPoseIndices.length > 0 && (
                           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                             <button
                               onClick={handleModelPoseGenerate}
@@ -2273,27 +2356,107 @@ export default function Home() {
                               {modelPoseGenerating ? (
                                 <div className="flex items-center justify-center gap-3">
                                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                                  <span>生成中...</span>
+                                  <span>批量生成中... (共 {selectedPoseIndices.length} 个)</span>
                                 </div>
                               ) : (
-                                '生成图片'
+                                `批量生成图片 (${selectedPoseIndices.length} 个)`
                               )}
                             </button>
                           </div>
                         )}
 
-                        {/* Generated Image Result */}
-                        {modelPoseGeneratedImage && (
-                          <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4">
-                            <h3 className="text-xl font-semibold text-gray-700 mb-3">生成的图片：</h3>
-                            <div className="relative w-full h-96 bg-gray-100 rounded-lg overflow-hidden">
-                              <Image
-                                src={modelPoseGeneratedImage}
-                                alt="生成的模特姿势图片"
-                                fill
-                                className="object-contain"
-                                unoptimized
-                              />
+                        {/* Generated Images Result */}
+                        {modelPoseGeneratedImages.length > 0 && (
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                              <h3 className="text-xl font-semibold text-gray-700">生成结果：</h3>
+                              <div className="flex gap-2 text-sm">
+                                <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full font-medium">
+                                  成功: {modelPoseGeneratedImages.filter(img => img.status === 'completed').length}
+                                </span>
+                                <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full font-medium">
+                                  生成中: {modelPoseGeneratedImages.filter(img => img.status === 'generating').length}
+                                </span>
+                                {modelPoseGeneratedImages.filter(img => img.status === 'failed').length > 0 && (
+                                  <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full font-medium">
+                                    失败: {modelPoseGeneratedImages.filter(img => img.status === 'failed').length}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {modelPoseGeneratedImages.map((item, idx) => (
+                                <div
+                                  key={idx}
+                                  className={`border-2 rounded-lg p-4 transition-all ${
+                                    item.status === 'completed'
+                                      ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-200'
+                                      : item.status === 'generating'
+                                      ? 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200'
+                                      : 'bg-gradient-to-br from-red-50 to-pink-50 border-red-200'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 mb-3">
+                                    <div className="w-7 h-7 bg-gradient-to-br from-purple-500 to-pink-500 text-white rounded-full flex items-center justify-center font-bold text-sm">
+                                      {item.poseIndex + 1}
+                                    </div>
+                                    <div className="flex-1">
+                                      <p className="text-xs text-gray-600 line-clamp-2">{item.pose}</p>
+                                    </div>
+                                    {item.status === 'completed' && (
+                                      <div className="flex-shrink-0 bg-green-500 rounded-full p-1">
+                                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                      </div>
+                                    )}
+                                    {item.status === 'generating' && (
+                                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+                                    )}
+                                    {item.status === 'failed' && (
+                                      <div className="flex-shrink-0 bg-red-500 rounded-full p-1">
+                                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {item.status === 'completed' && item.imageUrl && (
+                                    <div className="relative w-full h-64 bg-gray-100 rounded-lg overflow-hidden">
+                                      <Image
+                                        src={item.imageUrl}
+                                        alt={`姿势 ${item.poseIndex + 1}`}
+                                        fill
+                                        className="object-contain"
+                                        unoptimized
+                                      />
+                                    </div>
+                                  )}
+
+                                  {item.status === 'generating' && (
+                                    <div className="relative w-full h-64 bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center">
+                                      <div className="text-center">
+                                        <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-500 mx-auto mb-3"></div>
+                                        <p className="text-blue-600 font-medium">生成中...</p>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {item.status === 'failed' && (
+                                    <div className="relative w-full h-64 bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center">
+                                      <div className="text-center text-red-600 p-4">
+                                        <svg className="w-12 h-12 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <p className="font-medium mb-1">生成失败</p>
+                                        {item.error && <p className="text-xs text-gray-600">{item.error}</p>}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
                             </div>
                           </div>
                         )}
