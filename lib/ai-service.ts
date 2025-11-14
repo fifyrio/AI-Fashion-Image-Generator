@@ -261,27 +261,29 @@ export class AIService {
     }
 
     // 生成模特姿势列表
-    async generateModelPoseList(imageSource: string): Promise<{
+    async generateModelPoseList(imageSource: string, wearingMask: boolean = false): Promise<{
         description: string;
         poses: string[];
     }> {
         console.log('💃 正在生成模特姿势列表...');
         console.log('🔧 模型:', AI_MODELS.GPT);
+        console.log('😷 白色口罩:', wearingMask);
 
-        const prompt = `给我描述这个服装和场景的特征，并给我8个穿着此衣服的模特姿势。
+        const maskRequirement = wearingMask ? '，模特需要带着白色口罩' : '';
+        const prompt = `给我描述这个服装和场景的特征，并给我8个穿着此衣服的模特姿势${maskRequirement}。
 
 请以JSON格式返回结果，格式如下：
 {
   "description": "服装和场景的详细描述",
   "poses": [
-    "姿势1的详细描述",
-    "姿势2的详细描述",
-    "姿势3的详细描述",
-    "姿势4的详细描述",
-    "姿势5的详细描述",
-    "姿势6的详细描述",
-    "姿势7的详细描述",
-    "姿势8的详细描述"
+    "姿势1的详细描述${wearingMask ? '（带着白色口罩）' : ''}",
+    "姿势2的详细描述${wearingMask ? '（带着白色口罩）' : ''}",
+    "姿势3的详细描述${wearingMask ? '（带着白色口罩）' : ''}",
+    "姿势4的详细描述${wearingMask ? '（带着白色口罩）' : ''}",
+    "姿势5的详细描述${wearingMask ? '（带着白色口罩）' : ''}",
+    "姿势6的详细描述${wearingMask ? '（带着白色口罩）' : ''}",
+    "姿势7的详细描述${wearingMask ? '（带着白色口罩）' : ''}",
+    "姿势8的详细描述${wearingMask ? '（带着白色口罩）' : ''}"
   ]
 }`;
 

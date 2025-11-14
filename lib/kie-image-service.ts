@@ -262,13 +262,15 @@ export class KIEImageService {
      * @param description 服装和场景描述
      * @param imageUrl 原始图片URL
      * @param holdingPhone 是否一只手举着手机
+     * @param wearingMask 是否带着白色口罩
      * @returns 包含 taskId 的生成结果
      */
     async generateModelPose(
         pose: string,
         description: string,
         imageUrl: string,
-        holdingPhone: boolean = false
+        holdingPhone: boolean = false,
+        wearingMask: boolean = false
     ): Promise<ImageGenerationResult & { taskId?: string }> {
         const startTime = new Date();
 
@@ -277,16 +279,20 @@ export class KIEImageService {
             console.log(`📝 Pose: ${pose}`);
             console.log(`📝 Description: ${description}`);
             console.log(`📱 Holding Phone: ${holdingPhone}`);
+            console.log(`😷 Wearing Mask: ${wearingMask}`);
             console.log(`🖼️  Image URL: ${imageUrl}`);
 
             // 构建提示词
-            let poseWithPhone = pose;
+            let poseWithExtras = pose;
             if (holdingPhone) {
-                poseWithPhone = `${pose}，模特一只手举着手机`;
+                poseWithExtras = `${poseWithExtras}，模特一只手举着手机`;
+            }
+            if (wearingMask) {
+                poseWithExtras = `${poseWithExtras}，模特带着白色口罩`;
             }
 
             const prompt = `保持图片中的服装样式不变（${description}），但是按照下面的姿势要求生成新的模特图片:
-姿势：${poseWithPhone}
+姿势：${poseWithExtras}
 
 请生成一张符合上述姿势描述的模特图片，确保服装细节与原图一致。`;
 

@@ -109,6 +109,7 @@ export default function Home() {
   const [modelPoseGenerating, setModelPoseGenerating] = useState(false);
   const [modelPoseGeneratedImage, setModelPoseGeneratedImage] = useState<string | null>(null);
   const [modelHoldingPhone, setModelHoldingPhone] = useState(false);
+  const [modelWearingMask, setModelWearingMask] = useState(false);
 
   // Outfit-Change-V2 tab states
   const [outfitV2OriginalFile, setOutfitV2OriginalFile] = useState<File | null>(null);
@@ -844,7 +845,10 @@ export default function Home() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ imageUrl: uploadedUrl }),
+        body: JSON.stringify({
+          imageUrl: uploadedUrl,
+          wearingMask: modelWearingMask
+        }),
       });
 
       if (!analyzeResponse.ok) {
@@ -900,6 +904,7 @@ export default function Home() {
           pose: selectedPose,
           description: modelPoseAnalysis.description,
           holdingPhone: modelHoldingPhone,
+          wearingMask: modelWearingMask,
         }),
       });
 
@@ -2151,6 +2156,31 @@ export default function Home() {
                           </div>
                           <p className="text-sm text-gray-600 mt-1">
                             开启后，生成的姿势将包含&ldquo;模特一只手举着手机&rdquo;的动作
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* White Mask Option */}
+                    <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-4 border border-purple-200">
+                      <label className="flex items-center cursor-pointer group">
+                        <div className="relative">
+                          <input
+                            type="checkbox"
+                            checked={modelWearingMask}
+                            onChange={(e) => setModelWearingMask(e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-purple-500 peer-focus:ring-4 peer-focus:ring-purple-300 transition-all"></div>
+                          <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                        </div>
+                        <div className="ml-3 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">😷</span>
+                            <span className="font-semibold text-gray-800">模特带白色口罩</span>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-1">
+                            开启后，AI分析和生成的每个姿势都将包含白色口罩
                           </p>
                         </div>
                       </label>

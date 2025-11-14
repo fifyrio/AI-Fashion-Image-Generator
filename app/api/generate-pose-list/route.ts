@@ -5,7 +5,7 @@ export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
-    const { imageUrl } = await request.json();
+    const { imageUrl, wearingMask } = await request.json();
 
     if (!imageUrl) {
       return NextResponse.json(
@@ -15,9 +15,10 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('[generate-pose-list] Analyzing image:', imageUrl);
+    console.log('[generate-pose-list] Wearing mask:', wearingMask || false);
 
     const aiService = new AIService();
-    const result = await aiService.generateModelPoseList(imageUrl);
+    const result = await aiService.generateModelPoseList(imageUrl, wearingMask || false);
 
     console.log('[generate-pose-list] Analysis completed:', result);
 
