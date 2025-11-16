@@ -116,8 +116,8 @@ export default function Home() {
   const [outfitV2OriginalPreview, setOutfitV2OriginalPreview] = useState<string>('');
   const [outfitV2ExtractedImage, setOutfitV2ExtractedImage] = useState<string | null>(null);
   const [outfitV2ExtractingClothing, setOutfitV2ExtractingClothing] = useState(false);
-  const [outfitV2Character, setOutfitV2Character] = useState<string>(DEFAULT_CHARACTER_ID);
-  const [outfitV2GeneratedImage, setOutfitV2GeneratedImage] = useState<string | null>(null);
+  const [outfitV2SelectedCharacters, setOutfitV2SelectedCharacters] = useState<string[]>([]);
+  const [outfitV2GeneratedImages, setOutfitV2GeneratedImages] = useState<Array<{character: string, characterName: string, imageUrl: string, status: 'generating' | 'completed' | 'failed', error?: string}>>([]);
   const [outfitV2Generating, setOutfitV2Generating] = useState(false);
   const [outfitV2Error, setOutfitV2Error] = useState<string>('');
   const [outfitV2IsDragging, setOutfitV2IsDragging] = useState(false);
@@ -313,7 +313,7 @@ export default function Home() {
       });
 
       setCharacter(newModel.id);
-      setOutfitV2Character(newModel.id);
+      setOutfitV2SelectedCharacters([newModel.id]); // 添加新模特时默认选中它
       saveCustomModel(newModel);
       setShowAddModelModal(false);
       resetAddModelForm();
@@ -356,14 +356,19 @@ export default function Home() {
         const filtered = prev.filter(option => option.id !== modelId);
         const fallbackId = filtered[0]?.id ?? DEFAULT_CHARACTER_ID;
         const hasCharacter = filtered.some(option => option.id === character);
-        const hasOutfitCharacter = filtered.some(option => option.id === outfitV2Character);
 
         if (!hasCharacter) {
           setCharacter(fallbackId);
         }
 
-        if (!hasOutfitCharacter) {
-          setOutfitV2Character(fallbackId);
+        // 清理多选列表中已删除的模特
+        setOutfitV2SelectedCharacters(prev =>
+          prev.filter(id => filtered.some(option => option.id === id))
+        );
+
+        // 如果多选列表为空，设置fallback
+        if (outfitV2SelectedCharacters.length === 0 || !outfitV2SelectedCharacters.some(id => filtered.some(option => option.id === id))) {
+          // 不自动设置，让用户手动选择
         }
 
         return filtered;
@@ -1023,7 +1028,7 @@ export default function Home() {
     setOutfitV2OriginalFile(file);
     setOutfitV2Error('');
     setOutfitV2ExtractedImage(null);
-    setOutfitV2GeneratedImage(null);
+    setOutfitV2GeneratedImages([]);
 
     // Create preview
     const reader = new FileReader();
@@ -1163,64 +1168,138 @@ export default function Home() {
       return;
     }
 
+    if (outfitV2SelectedCharacters.length === 0) {
+      setOutfitV2Error('请先选择至少一个模特');
+      return;
+    }
+
     setOutfitV2Generating(true);
     setOutfitV2Error('');
-    setOutfitV2GeneratedImage(null);
+
+    // 初始化生成结果数组
+    const initialResults = outfitV2SelectedCharacters.map(characterId => {
+      const character = characterOptions.find(c => c.id === characterId);
+      return {
+        character: characterId,
+        characterName: character?.label || characterId,
+        imageUrl: '',
+        status: 'generating' as const,
+      };
+    });
+    setOutfitV2GeneratedImages(initialResults);
 
     try {
-      // 调用模特换装V2 API
-      const createResponse = await fetch('/api/outfit-change-v2', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          clothingImageUrl: outfitV2ExtractedImage,
-          character: outfitV2Character,
-        }),
+      // 为每个选中的模特创建任务
+      const tasks = outfitV2SelectedCharacters.map(async (characterId) => {
+        const character = characterOptions.find(c => c.id === characterId);
+
+        try {
+          // 调用模特换装V2 API
+          const createResponse = await fetch('/api/outfit-change-v2', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              clothingImageUrl: outfitV2ExtractedImage,
+              character: characterId,
+            }),
+          });
+
+          if (!createResponse.ok) {
+            const errorData = await createResponse.json();
+            throw new Error(errorData.error || 'Task creation failed');
+          }
+
+          const { taskId } = await createResponse.json();
+          console.log(`Outfit change V2 task created for ${character?.label}:`, taskId);
+
+          // 轮询任务状态
+          const maxAttempts = 60;
+          const pollInterval = 2000;
+
+          for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+            const statusResponse = await fetch(`/api/task-status?taskId=${taskId}`);
+
+            if (!statusResponse.ok) {
+              console.warn('Failed to fetch task status, retrying...');
+              continue;
+            }
+
+            const statusData = await statusResponse.json();
+            console.log(`Task status for ${character?.label} (attempt ${attempt + 1}):`, statusData.status);
+
+            if (statusData.status === 'completed' && statusData.resultUrls?.[0]) {
+              // 更新该模特的生成结果
+              setOutfitV2GeneratedImages(prev =>
+                prev.map(item =>
+                  item.character === characterId
+                    ? { ...item, imageUrl: statusData.resultUrls[0], status: 'completed' as const }
+                    : item
+                )
+              );
+              console.log(`✅ Outfit change V2 completed for ${character?.label}`);
+              return { character: characterId, success: true, imageUrl: statusData.resultUrls[0] };
+            }
+
+            if (statusData.status === 'failed') {
+              throw new Error('模特换装生成失败');
+            }
+          }
+
+          throw new Error('模特换装生成超时');
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : '模特换装生成失败';
+          console.error(`❌ Error generating outfit change for ${character?.label}:`, errorMessage);
+
+          // 更新该模特的失败状态
+          setOutfitV2GeneratedImages(prev =>
+            prev.map(item =>
+              item.character === characterId
+                ? { ...item, status: 'failed' as const, error: errorMessage }
+                : item
+            )
+          );
+          return { character: characterId, success: false, error: errorMessage };
+        }
       });
 
-      if (!createResponse.ok) {
-        const errorData = await createResponse.json();
-        throw new Error(errorData.error || 'Task creation failed');
+      // 等待所有任务完成
+      const results = await Promise.all(tasks);
+      const successCount = results.filter(r => r.success).length;
+      const failCount = results.filter(r => !r.success).length;
+
+      if (failCount > 0) {
+        setOutfitV2Error(`批量生成完成：${successCount} 个成功，${failCount} 个失败`);
       }
 
-      const { taskId } = await createResponse.json();
-      console.log('Outfit change V2 task created:', taskId);
-
-      // 轮询任务状态
-      const maxAttempts = 60;
-      const pollInterval = 2000;
-
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
-
-        const statusResponse = await fetch(`/api/task-status?taskId=${taskId}`);
-
-        if (!statusResponse.ok) {
-          console.warn('Failed to fetch task status, retrying...');
-          continue;
-        }
-
-        const statusData = await statusResponse.json();
-        console.log(`Task status (attempt ${attempt + 1}):`, statusData.status);
-
-        if (statusData.status === 'completed' && statusData.resultUrls?.[0]) {
-          setOutfitV2GeneratedImage(statusData.resultUrls[0]);
-          console.log('✅ Outfit change V2 completed');
-          return;
-        }
-
-        if (statusData.status === 'failed') {
-          throw new Error('模特换装生成失败');
-        }
-      }
-
-      throw new Error('模特换装生成超时');
+      console.log('✅ Batch outfit change completed:', { successCount, failCount });
     } catch (error) {
-      setOutfitV2Error(error instanceof Error ? error.message : '模特换装生成失败');
+      setOutfitV2Error(error instanceof Error ? error.message : 'Batch outfit change failed');
     } finally {
       setOutfitV2Generating(false);
+    }
+  };
+
+  // 切换模特选择状态
+  const toggleOutfitV2CharacterSelection = (characterId: string) => {
+    setOutfitV2SelectedCharacters(prev => {
+      if (prev.includes(characterId)) {
+        return prev.filter(id => id !== characterId);
+      } else {
+        return [...prev, characterId];
+      }
+    });
+  };
+
+  // 全选/取消全选模特
+  const toggleOutfitV2SelectAll = () => {
+    if (outfitV2SelectedCharacters.length === characterOptions.length) {
+      setOutfitV2SelectedCharacters([]);
+    } else {
+      setOutfitV2SelectedCharacters(characterOptions.map(c => c.id));
     }
   };
 
@@ -1228,7 +1307,8 @@ export default function Home() {
     setOutfitV2OriginalFile(null);
     setOutfitV2OriginalPreview('');
     setOutfitV2ExtractedImage(null);
-    setOutfitV2GeneratedImage(null);
+    setOutfitV2SelectedCharacters([]);
+    setOutfitV2GeneratedImages([]);
     setOutfitV2Error('');
   };
 
@@ -2664,24 +2744,47 @@ export default function Home() {
               {outfitV2ExtractedImage && (
                 <>
                   <div className="border-t border-gray-200 pt-6 space-y-4">
-                    <h2 className="text-2xl font-semibold text-gray-700">
-                      步骤 2：选择模特
-                    </h2>
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-2xl font-semibold text-gray-700">
+                        步骤 2：选择模特 - 多选批量生成
+                      </h2>
+                      <button
+                        onClick={toggleOutfitV2SelectAll}
+                        className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold rounded-lg transition-all text-sm"
+                      >
+                        {outfitV2SelectedCharacters.length === characterOptions.length ? '取消全选' : '全选'}
+                      </button>
+                    </div>
+
+                    {outfitV2SelectedCharacters.length > 0 && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <p className="text-blue-800 text-sm font-medium">
+                          已选择 {outfitV2SelectedCharacters.length} 个模特
+                        </p>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       {characterOptions.map(({ id, label, image, isCustom }) => {
-                        const isActive = outfitV2Character === id;
+                        const isActive = outfitV2SelectedCharacters.includes(id);
                         const isDeleting = deletingModelId === id;
                         return (
                           <div key={id} className="relative">
                             <button
-                              onClick={() => setOutfitV2Character(id)}
+                              onClick={() => toggleOutfitV2CharacterSelection(id)}
                               className={`w-full rounded-xl border-2 transition-all text-left pb-3 ${
                                 isActive
-                                  ? 'border-purple-500 bg-purple-50 shadow-lg'
+                                  ? 'border-purple-500 bg-purple-50 shadow-lg ring-2 ring-purple-300'
                                   : 'border-transparent bg-gray-100 hover:border-purple-200'
                               }`}
                             >
+                              {isActive && (
+                                <div className="absolute top-2 left-2 z-10 bg-purple-500 rounded-full p-1">
+                                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                </div>
+                              )}
                               {image && (
                                 <div
                                   className="relative w-full overflow-hidden rounded-t-lg bg-gray-200"
@@ -2737,41 +2840,118 @@ export default function Home() {
                       步骤 3：生成换装图片
                     </h2>
 
-                    <button
-                      onClick={handleOutfitV2Generate}
-                      disabled={outfitV2Generating}
-                      className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100"
-                    >
-                      {outfitV2Generating ? (
-                        <div className="flex items-center justify-center gap-3">
-                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                          <span>AI 生成中...</span>
-                        </div>
-                      ) : (
-                        '生成模特换装图片'
-                      )}
-                    </button>
+                    {outfitV2SelectedCharacters.length > 0 ? (
+                      <button
+                        onClick={handleOutfitV2Generate}
+                        disabled={outfitV2Generating}
+                        className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100"
+                      >
+                        {outfitV2Generating ? (
+                          <div className="flex items-center justify-center gap-3">
+                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                            <span>批量生成中... (共 {outfitV2SelectedCharacters.length} 个)</span>
+                          </div>
+                        ) : (
+                          `批量生成换装图片 (${outfitV2SelectedCharacters.length} 个)`
+                        )}
+                      </button>
+                    ) : (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
+                        <p className="text-yellow-800 text-sm font-medium">
+                          请先选择至少一个模特
+                        </p>
+                      </div>
+                    )}
 
-                    {/* Generated Image Result */}
-                    {outfitV2GeneratedImage && (
-                      <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-500 rounded-lg p-6">
-                        <h3 className="text-xl font-semibold text-gray-700 mb-4 flex items-center gap-2">
-                          <span className="text-2xl">✨</span>
-                          <span>生成的换装图片：</span>
-                        </h3>
-                        <div className="relative w-full h-96 bg-gray-100 rounded-lg overflow-hidden">
-                          <Image
-                            src={outfitV2GeneratedImage}
-                            alt="生成的换装图片"
-                            fill
-                            className="object-contain"
-                            unoptimized
-                          />
+                    {/* Generated Images Result */}
+                    {outfitV2GeneratedImages.length > 0 && (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-xl font-semibold text-gray-700">生成结果：</h3>
+                          <div className="flex gap-2 text-sm">
+                            <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full font-medium">
+                              成功: {outfitV2GeneratedImages.filter(img => img.status === 'completed').length}
+                            </span>
+                            <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full font-medium">
+                              生成中: {outfitV2GeneratedImages.filter(img => img.status === 'generating').length}
+                            </span>
+                            {outfitV2GeneratedImages.filter(img => img.status === 'failed').length > 0 && (
+                              <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full font-medium">
+                                失败: {outfitV2GeneratedImages.filter(img => img.status === 'failed').length}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <div className="mt-4 bg-white p-4 rounded-lg">
-                          <p className="text-sm text-gray-600 text-center">
-                            ✅ 模特换装完成！服装已成功穿到选定的模特身上
-                          </p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {outfitV2GeneratedImages.map((item, idx) => (
+                            <div
+                              key={idx}
+                              className={`border-2 rounded-lg p-4 transition-all ${
+                                item.status === 'completed'
+                                  ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-200'
+                                  : item.status === 'generating'
+                                  ? 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200'
+                                  : 'bg-gradient-to-br from-red-50 to-pink-50 border-red-200'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold text-gray-800">{item.characterName}</span>
+                                </div>
+                                {item.status === 'completed' && (
+                                  <div className="flex-shrink-0 bg-green-500 rounded-full p-1">
+                                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  </div>
+                                )}
+                                {item.status === 'generating' && (
+                                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+                                )}
+                                {item.status === 'failed' && (
+                                  <div className="flex-shrink-0 bg-red-500 rounded-full p-1">
+                                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </div>
+                                )}
+                              </div>
+
+                              {item.status === 'completed' && item.imageUrl && (
+                                <div className="relative w-full bg-gray-100 rounded-lg overflow-hidden" style={{ aspectRatio: '9 / 16' }}>
+                                  <Image
+                                    src={item.imageUrl}
+                                    alt={item.characterName}
+                                    fill
+                                    className="object-contain"
+                                    unoptimized
+                                  />
+                                </div>
+                              )}
+
+                              {item.status === 'generating' && (
+                                <div className="relative w-full bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center" style={{ aspectRatio: '9 / 16' }}>
+                                  <div className="text-center">
+                                    <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-500 mx-auto mb-3"></div>
+                                    <p className="text-blue-600 font-medium">生成中...</p>
+                                  </div>
+                                </div>
+                              )}
+
+                              {item.status === 'failed' && (
+                                <div className="relative w-full bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center" style={{ aspectRatio: '9 / 16' }}>
+                                  <div className="text-center text-red-600 p-4">
+                                    <svg className="w-12 h-12 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <p className="font-medium mb-1">生成失败</p>
+                                    {item.error && <p className="text-xs text-gray-600">{item.error}</p>}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
