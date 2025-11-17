@@ -317,10 +317,16 @@ export class KIEImageService {
                 poseWithExtras = `${poseWithExtras}，模特带着白色口罩`;
             }
 
-            const prompt = `保持图片中的服装样式不变（${description}），但是按照下面的姿势要求生成新的模特图片:
+            const prompt = `保持图片中的服装样式和背景环境完全不变（${description}），只改变模特的姿势:
 姿势：${poseWithExtras}
 
-请生成一张符合上述姿势描述的模特图片，确保服装细节与原图一致。`;
+核心要求：
+1. **完全保持原背景不变** - 背景环境、场景、道具、光线等完全与原图一致
+2. **完全保持服装不变** - 服装款式、颜色、材质、细节与原图完全一致
+3. **只改变模特姿势** - 按照姿势描述要求改变模特的动作、角度、表情
+4. **保持整体协调** - 新姿势要与背景和服装风格协调自然
+
+请生成一张符合上述要求的模特图片。`;
 
             // 创建任务
             const taskId = await this.createTask(prompt, imageUrl);
