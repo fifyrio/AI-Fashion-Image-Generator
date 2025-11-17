@@ -81,10 +81,10 @@ export default function Home() {
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Scene-Pose tab states - 支持多图片上传
-  const [scenePoseFiles, setScenePoseFiles] = useState<File[]>([]);
-  const [scenePosePreviews, setScenePosePreviews] = useState<string[]>([]);
-  const [scenePoseUploadedUrls, setScenePoseUploadedUrls] = useState<string[]>([]);
+  // Scene-Pose tab states
+  const [scenePoseFile, setScenePoseFile] = useState<File | null>(null);
+  const [scenePosePreview, setScenePosePreview] = useState<string>('');
+  const [scenePoseUploadedUrl, setScenePoseUploadedUrl] = useState<string>('');
   const [scenePoseAnalyzing, setScenePoseAnalyzing] = useState(false);
   const [scenePoseAnalysis, setScenePoseAnalysis] = useState<{
     description: string;
@@ -93,8 +93,7 @@ export default function Home() {
   const [scenePoseError, setScenePoseError] = useState<string>('');
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState<number | null>(null);
   const [scenePoseGenerating, setScenePoseGenerating] = useState(false);
-  const [scenePoseGeneratedImages, setScenePoseGeneratedImages] = useState<string[]>([]);
-  const [scenePoseBatchProgress, setScenePoseBatchProgress] = useState<{current: number; total: number} | null>(null);
+  const [scenePoseGeneratedImage, setScenePoseGeneratedImage] = useState<string | null>(null);
 
   // Model-Pose tab states
   const [modelPoseFile, setModelPoseFile] = useState<File | null>(null);
@@ -678,35 +677,25 @@ export default function Home() {
   const uploadedCount = filesWithStatus.filter(f => f.status === 'uploaded').length;
   const uploadingCount = filesWithStatus.filter(f => f.status === 'uploading').length;
 
-  // Scene-Pose tab handlers - 支持多文件上传
+  // Scene-Pose tab handlers
   const handleScenePoseFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    const fileArray = Array.from(files);
-    setScenePoseFiles(fileArray);
+    setScenePoseFile(file);
     setScenePoseError('');
     setScenePoseAnalysis(null);
-    setScenePoseGeneratedImages([]);
-    setScenePoseBatchProgress(null);
 
-    // Create previews for all files
-    const previewPromises = fileArray.map((file) => {
-      return new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          resolve(reader.result as string);
-        };
-        reader.readAsDataURL(file);
-      });
-    });
-
-    const previews = await Promise.all(previewPromises);
-    setScenePosePreviews(previews);
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setScenePosePreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleScenePoseAnalyze = async () => {
-    if (scenePoseFiles.length === 0) {
+    if (!scenePoseFile) {
       setScenePoseError('请先上传图片');
       return;
     }
@@ -715,11 +704,9 @@ export default function Home() {
     setScenePoseError('');
 
     try {
-      // Upload all files to R2
+      // Upload to R2 first
       const formData = new FormData();
-      scenePoseFiles.forEach(file => {
-        formData.append('files', file);
-      });
+      formData.append('files', scenePoseFile);
 
       const uploadResponse = await fetch('/api/upload', {
         method: 'POST',
@@ -731,17 +718,16 @@ export default function Home() {
       }
 
       const uploadData = await uploadResponse.json();
-      const uploadedUrls = uploadData.uploaded.map((item: { url: string }) => item.url);
-      setScenePoseUploadedUrls(uploadedUrls);
+      const uploadedUrl = uploadData.uploaded[0].url;
+      setScenePoseUploadedUrl(uploadedUrl);
 
-      // Only analyze the FIRST image
-      const firstImageUrl = uploadedUrls[0];
+      // Analyze the image
       const analyzeResponse = await fetch('/api/analyze-scene-pose', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ imageUrl: firstImageUrl }),
+        body: JSON.stringify({ imageUrl: uploadedUrl }),
       });
 
       if (!analyzeResponse.ok) {
@@ -752,7 +738,7 @@ export default function Home() {
       const result = await analyzeResponse.json();
       setScenePoseAnalysis(result);
       setSelectedSuggestionIndex(null);
-      setScenePoseGeneratedImages([]);
+      setScenePoseGeneratedImage(null);
     } catch (error) {
       setScenePoseError(error instanceof Error ? error.message : '分析失败');
     } finally {
@@ -761,14 +747,13 @@ export default function Home() {
   };
 
   const clearScenePose = () => {
-    setScenePoseFiles([]);
-    setScenePosePreviews([]);
-    setScenePoseUploadedUrls([]);
+    setScenePoseFile(null);
+    setScenePosePreview('');
+    setScenePoseUploadedUrl('');
     setScenePoseAnalysis(null);
     setScenePoseError('');
     setSelectedSuggestionIndex(null);
-    setScenePoseGeneratedImages([]);
-    setScenePoseBatchProgress(null);
+    setScenePoseGeneratedImage(null);
   };
 
   const handleScenePoseGenerate = async () => {
@@ -777,56 +762,41 @@ export default function Home() {
       return;
     }
 
-    if (scenePoseUploadedUrls.length === 0) {
+    if (!scenePoseUploadedUrl) {
       setScenePoseError('图片未上传');
       return;
     }
 
     setScenePoseGenerating(true);
     setScenePoseError('');
-    setScenePoseGeneratedImages([]);
-    setScenePoseBatchProgress({ current: 0, total: scenePoseUploadedUrls.length });
+    setScenePoseGeneratedImage(null);
 
     try {
       const selectedSuggestion = scenePoseAnalysis.suggestions[selectedSuggestionIndex];
-      const generatedUrls: string[] = [];
 
-      // Batch process all uploaded images
-      for (let i = 0; i < scenePoseUploadedUrls.length; i++) {
-        const imageUrl = scenePoseUploadedUrls[i];
+      const response = await fetch('/api/generate-scene-pose', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          originalImageUrl: scenePoseUploadedUrl,
+          scene: selectedSuggestion.scene,
+          pose: selectedSuggestion.pose,
+        }),
+      });
 
-        setScenePoseBatchProgress({ current: i + 1, total: scenePoseUploadedUrls.length });
-
-        const response = await fetch('/api/generate-scene-pose', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            originalImageUrl: imageUrl,
-            scene: selectedSuggestion.scene,
-            pose: selectedSuggestion.pose,
-          }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(`图片 ${i + 1} 生成失败: ${errorData.error || 'Generation failed'}`);
-        }
-
-        const result = await response.json();
-        generatedUrls.push(result.imageUrl);
-
-        // Update generated images progressively
-        setScenePoseGeneratedImages([...generatedUrls]);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '生成失败');
       }
 
-      setScenePoseGeneratedImages(generatedUrls);
+      const result = await response.json();
+      setScenePoseGeneratedImage(result.imageUrl);
     } catch (error) {
-      setScenePoseError(error instanceof Error ? error.message : '批量生成失败');
+      setScenePoseError(error instanceof Error ? error.message : '生成失败');
     } finally {
       setScenePoseGenerating(false);
-      setScenePoseBatchProgress(null);
     }
   };
 
@@ -2043,9 +2013,9 @@ export default function Home() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-semibold text-gray-700">
-                    上传服装图片（支持多张）
+                    上传服装图片
                   </h2>
-                  {scenePoseFiles.length > 0 && (
+                  {scenePoseFile && (
                     <button
                       onClick={clearScenePose}
                       className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white font-medium px-4 py-2 rounded-lg transition-colors"
@@ -2059,7 +2029,7 @@ export default function Home() {
                 </div>
 
                 {/* Upload Area */}
-                {scenePoseFiles.length === 0 ? (
+                {!scenePoseFile ? (
                   <label
                     htmlFor="scene-pose-upload"
                     className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer transition-all border-gray-300 bg-gray-50 hover:bg-gray-100"
@@ -2083,11 +2053,11 @@ export default function Home() {
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                           </svg>
-                          上传服装图片（可多选）
+                          上传服装图片
                         </div>
                       </div>
                       <p className="text-sm text-gray-500">
-                        支持 JPEG、PNG、GIF 格式，可一次选择多张图片
+                        支持 JPEG、PNG、GIF 格式
                       </p>
                     </div>
                     <input
@@ -2095,38 +2065,20 @@ export default function Home() {
                       type="file"
                       className="hidden"
                       accept="image/*"
-                      multiple
                       onChange={handleScenePoseFileChange}
                     />
                   </label>
                 ) : (
                   <div className="space-y-4">
-                    {/* Image Previews - Show all uploaded images */}
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <h3 className="font-semibold text-blue-900 mb-3">
-                        已上传 {scenePoseFiles.length} 张图片：
-                      </h3>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                        {scenePosePreviews.map((preview, index) => (
-                          <div key={index} className="relative aspect-square bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200">
-                            <Image
-                              src={preview}
-                              alt={`上传的图片 ${index + 1}`}
-                              fill
-                              className="object-cover"
-                              unoptimized
-                            />
-                            {index === 0 && (
-                              <div className="absolute top-2 left-2 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded">
-                                分析此图
-                              </div>
-                            )}
-                            <div className="absolute bottom-2 right-2 bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded">
-                              {index + 1}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                    {/* Image Preview */}
+                    <div className="relative w-full h-96 bg-gray-100 rounded-lg overflow-hidden">
+                      <Image
+                        src={scenePosePreview}
+                        alt="上传的服装图片"
+                        fill
+                        className="object-contain"
+                        unoptimized
+                      />
                     </div>
 
                     {/* Analyze Button */}
@@ -2222,50 +2174,29 @@ export default function Home() {
                               className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100"
                             >
                               {scenePoseGenerating ? (
-                                <div className="flex flex-col items-center justify-center gap-2">
+                                <div className="flex items-center justify-center gap-3">
                                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                                  {scenePoseBatchProgress ? (
-                                    <span>批量生成中 {scenePoseBatchProgress.current}/{scenePoseBatchProgress.total}...</span>
-                                  ) : (
-                                    <span>生成中...</span>
-                                  )}
+                                  <span>生成中...</span>
                                 </div>
                               ) : (
-                                `批量生成图片（${scenePoseFiles.length} 张）`
+                                '生成图片'
                               )}
                             </button>
                           </div>
                         )}
 
-                        {/* Generated Images Results */}
-                        {scenePoseGeneratedImages.length > 0 && (
+                        {/* Generated Image Result */}
+                        {scenePoseGeneratedImage && (
                           <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4">
-                            <h3 className="text-xl font-semibold text-gray-700 mb-3">
-                              生成的图片（{scenePoseGeneratedImages.length} 张）：
-                            </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                              {scenePoseGeneratedImages.map((imageUrl, index) => (
-                                <div key={index} className="relative aspect-[9/16] bg-gray-100 rounded-lg overflow-hidden">
-                                  <Image
-                                    src={imageUrl}
-                                    alt={`生成的场景+姿势图片 ${index + 1}`}
-                                    fill
-                                    className="object-cover"
-                                    unoptimized
-                                  />
-                                  <div className="absolute top-2 left-2 bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded">
-                                    {index + 1}
-                                  </div>
-                                  <a
-                                    href={imageUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="absolute bottom-2 right-2 bg-green-600 hover:bg-green-700 text-white text-xs px-2 py-1 rounded transition-colors"
-                                  >
-                                    查看大图
-                                  </a>
-                                </div>
-                              ))}
+                            <h3 className="text-xl font-semibold text-gray-700 mb-3">生成的图片：</h3>
+                            <div className="relative w-full h-96 bg-gray-100 rounded-lg overflow-hidden">
+                              <Image
+                                src={scenePoseGeneratedImage}
+                                alt="生成的场景+姿势图片"
+                                fill
+                                className="object-contain"
+                                unoptimized
+                              />
                             </div>
                           </div>
                         )}
