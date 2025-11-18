@@ -111,18 +111,42 @@ export default function Home() {
   const [modelHoldingPhone, setModelHoldingPhone] = useState(false);
   const [modelWearingMask, setModelWearingMask] = useState(false);
 
-  // Outfit-Change-V2 tab states
-  const [outfitV2OriginalFile, setOutfitV2OriginalFile] = useState<File | null>(null);
-  const [outfitV2OriginalPreview, setOutfitV2OriginalPreview] = useState<string>('');
-  const [outfitV2ExtractedImage, setOutfitV2ExtractedImage] = useState<string | null>(null);
+  // Outfit-Change-V2 tab states - 批量处理
+  const [outfitV2OriginalFiles, setOutfitV2OriginalFiles] = useState<File[]>([]);
+  const [outfitV2OriginalPreviews, setOutfitV2OriginalPreviews] = useState<string[]>([]);
+  const [outfitV2OriginalUrls, setOutfitV2OriginalUrls] = useState<string[]>([]);
+
+  // 批量提取的服装（对应每张原图）
+  const [outfitV2ExtractedImages, setOutfitV2ExtractedImages] = useState<{
+    [index: number]: { url: string; status: 'extracting' | 'completed' | 'failed'; error?: string };
+  }>({});
+
   const [outfitV2ExtractingClothing, setOutfitV2ExtractingClothing] = useState(false);
+  const [outfitV2ExtractProgress, setOutfitV2ExtractProgress] = useState<{
+    completed: number;
+    total: number;
+  } | null>(null);
+
+  // 批量换装结果（对应每个服装）
   const [outfitV2SelectedCharacters, setOutfitV2SelectedCharacters] = useState<string[]>([]);
-  const [outfitV2GeneratedImages, setOutfitV2GeneratedImages] = useState<Array<{character: string, characterName: string, imageUrl: string, status: 'generating' | 'completed' | 'failed', error?: string}>>([]);
+  const [outfitV2GeneratedImages, setOutfitV2GeneratedImages] = useState<{
+    [index: number]: { url: string; status: 'generating' | 'completed' | 'failed'; error?: string };
+  }>({});
+
   const [outfitV2Generating, setOutfitV2Generating] = useState(false);
+  const [outfitV2GenerateProgress, setOutfitV2GenerateProgress] = useState<{
+    completed: number;
+    total: number;
+  } | null>(null);
+
   const [outfitV2Error, setOutfitV2Error] = useState<string>('');
   const [outfitV2IsDragging, setOutfitV2IsDragging] = useState(false);
   const [outfitV2RecommendMatch, setOutfitV2RecommendMatch] = useState(false);
   const [outfitV2ExtractTopOnly, setOutfitV2ExtractTopOnly] = useState(false);
+
+  // 当前阶段
+  type OutfitV2Stage = 'upload' | 'extracting' | 'extracted' | 'generating' | 'completed';
+  const [outfitV2Stage, setOutfitV2Stage] = useState<OutfitV2Stage>('upload');
 
   // Mimic-Reference tab states
   const [mimicRefFile, setMimicRefFile] = useState<File | null>(null);
@@ -1023,25 +1047,35 @@ export default function Home() {
     }
   };
 
-  // Outfit-Change-V2 tab handlers
-  const processOutfitV2File = async (file: File) => {
-    setOutfitV2OriginalFile(file);
+  // Outfit-Change-V2 tab handlers - 批量处理
+  const processOutfitV2Files = async (files: File[]) => {
+    setOutfitV2OriginalFiles(files);
     setOutfitV2Error('');
-    setOutfitV2ExtractedImage(null);
-    setOutfitV2GeneratedImages([]);
+    setOutfitV2ExtractedImages({});
+    setOutfitV2GeneratedImages({});
+    setOutfitV2OriginalUrls([]);
+    setOutfitV2Stage('upload');
 
-    // Create preview
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setOutfitV2OriginalPreview(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    // Create previews for all files
+    const previewPromises = files.map((file) => {
+      return new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          resolve(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+
+    const previews = await Promise.all(previewPromises);
+    setOutfitV2OriginalPreviews(previews);
   };
 
   const handleOutfitV2FileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    processOutfitV2File(file);
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const fileArray = Array.from(files);
+    processOutfitV2Files(fileArray);
   };
 
   const handleOutfitV2DragEnter = (e: React.DragEvent<HTMLLabelElement>) => {
@@ -1068,30 +1102,59 @@ export default function Home() {
 
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
-      const file = files[0];
-      // Check if it's an image file
-      if (file.type.startsWith('image/')) {
-        processOutfitV2File(file);
+      const fileArray = Array.from(files).filter(file => file.type.startsWith('image/'));
+      if (fileArray.length > 0) {
+        processOutfitV2Files(fileArray);
       } else {
         setOutfitV2Error('请上传图片文件（JPEG、PNG、GIF）');
       }
     }
   };
 
+  // 通用轮询函数
+  const pollTaskStatus = async (taskId: string, maxAttempts = 60): Promise<string> => {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      const statusResponse = await fetch(`/api/task-status?taskId=${taskId}`);
+
+      if (!statusResponse.ok) {
+        console.warn('Failed to fetch task status, retrying...');
+        continue;
+      }
+
+      const statusData = await statusResponse.json();
+
+      if (statusData.status === 'completed' && statusData.resultUrls?.[0]) {
+        return statusData.resultUrls[0];
+      }
+
+      if (statusData.status === 'failed') {
+        throw new Error(`任务失败: ${taskId}`);
+      }
+    }
+
+    throw new Error(`任务超时: ${taskId}`);
+  };
+
+  // 批量提取服装（并行处理）
   const handleOutfitV2ExtractClothing = async () => {
-    if (!outfitV2OriginalFile) {
+    if (outfitV2OriginalFiles.length === 0) {
       setOutfitV2Error('请先上传图片');
       return;
     }
 
     setOutfitV2ExtractingClothing(true);
     setOutfitV2Error('');
-    setOutfitV2ExtractedImage(null);
+    setOutfitV2ExtractedImages({});
+    setOutfitV2Stage('extracting');
 
     try {
-      // Upload to R2 first
+      // Step 1: 上传所有图片到R2
       const formData = new FormData();
-      formData.append('files', outfitV2OriginalFile);
+      outfitV2OriginalFiles.forEach(file => {
+        formData.append('files', file);
+      });
 
       const uploadResponse = await fetch('/api/upload', {
         method: 'POST',
@@ -1103,67 +1166,106 @@ export default function Home() {
       }
 
       const uploadData = await uploadResponse.json();
-      const uploadedUrl = uploadData.uploaded[0].url;
+      const uploadedUrls = uploadData.uploaded.map((item: { url: string }) => item.url);
+      setOutfitV2OriginalUrls(uploadedUrls);
 
-      // Extract clothing using KIE
-      const extractResponse = await fetch('/api/extract-clothing', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          imageUrl: uploadedUrl,
-          recommendMatch: outfitV2RecommendMatch,
-          extractTopOnly: outfitV2ExtractTopOnly
-        }),
+      // Step 2: 并行创建所有提取任务
+      console.log(`🚀 Creating ${uploadedUrls.length} extraction tasks in parallel...`);
+
+      const createTaskPromises = uploadedUrls.map(async (url: string, index: number) => {
+        // 标记为提取中
+        setOutfitV2ExtractedImages(prev => ({
+          ...prev,
+          [index]: { url: '', status: 'extracting' }
+        }));
+
+        const extractResponse = await fetch('/api/extract-clothing', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageUrl: url,
+            recommendMatch: outfitV2RecommendMatch,
+            extractTopOnly: outfitV2ExtractTopOnly
+          }),
+        });
+
+        if (!extractResponse.ok) {
+          throw new Error(`图片 ${index + 1} 提取任务创建失败`);
+        }
+
+        const { taskId } = await extractResponse.json();
+        console.log(`✅ Task ${index + 1} created: ${taskId}`);
+        return { index, taskId };
       });
 
-      if (!extractResponse.ok) {
-        const errorData = await extractResponse.json();
-        throw new Error(errorData.error || '服装提取失败');
+      const tasks = await Promise.all(createTaskPromises);
+
+      // Step 3: 并行轮询所有任务
+      setOutfitV2ExtractProgress({ completed: 0, total: tasks.length });
+
+      const pollPromises = tasks.map(async ({ index, taskId }) => {
+        try {
+          const extractedUrl = await pollTaskStatus(taskId);
+
+          // 更新状态为完成
+          setOutfitV2ExtractedImages(prev => ({
+            ...prev,
+            [index]: { url: extractedUrl, status: 'completed' }
+          }));
+
+          // 更新进度
+          setOutfitV2ExtractProgress(prev =>
+            prev ? { ...prev, completed: prev.completed + 1 } : null
+          );
+
+          console.log(`✅ Extraction ${index + 1} completed`);
+          return { index, success: true };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : '提取失败';
+
+          // 更新状态为失败
+          setOutfitV2ExtractedImages(prev => ({
+            ...prev,
+            [index]: { url: '', status: 'failed', error: errorMessage }
+          }));
+
+          // 更新进度
+          setOutfitV2ExtractProgress(prev =>
+            prev ? { ...prev, completed: prev.completed + 1 } : null
+          );
+
+          console.error(`❌ Extraction ${index + 1} failed:`, errorMessage);
+          return { index, success: false, error: errorMessage };
+        }
+      });
+
+      const results = await Promise.all(pollPromises);
+      const successCount = results.filter(r => r.success).length;
+      const failCount = results.filter(r => !r.success).length;
+
+      setOutfitV2Stage('extracted');
+      setOutfitV2ExtractProgress(null);
+
+      if (failCount > 0) {
+        setOutfitV2Error(`批量提取完成：${successCount} 个成功，${failCount} 个失败`);
       }
 
-      const { taskId } = await extractResponse.json();
-      console.log('Extract clothing task created:', taskId);
-
-      // 轮询任务状态
-      const maxAttempts = 60;
-      const pollInterval = 2000;
-
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
-
-        const statusResponse = await fetch(`/api/task-status?taskId=${taskId}`);
-
-        if (!statusResponse.ok) {
-          console.warn('Failed to fetch task status, retrying...');
-          continue;
-        }
-
-        const statusData = await statusResponse.json();
-        console.log(`Task status (attempt ${attempt + 1}):`, statusData.status);
-
-        if (statusData.status === 'completed' && statusData.resultUrls?.[0]) {
-          setOutfitV2ExtractedImage(statusData.resultUrls[0]);
-          console.log('✅ Clothing extraction completed');
-          return;
-        }
-
-        if (statusData.status === 'failed') {
-          throw new Error('服装提取失败');
-        }
-      }
-
-      throw new Error('服装提取超时');
+      console.log('✅ Batch extraction completed:', { successCount, failCount });
     } catch (error) {
-      setOutfitV2Error(error instanceof Error ? error.message : '服装提取失败');
+      setOutfitV2Error(error instanceof Error ? error.message : '批量提取失败');
+      setOutfitV2Stage('upload');
     } finally {
       setOutfitV2ExtractingClothing(false);
     }
   };
 
   const handleOutfitV2Generate = async () => {
-    if (!outfitV2ExtractedImage) {
+    // 检查是否有成功提取的服装
+    const extractedClothing = Object.entries(outfitV2ExtractedImages).filter(
+      ([_, data]) => data.status === 'completed'
+    );
+
+    if (extractedClothing.length === 0) {
       setOutfitV2Error('请先提取服装');
       return;
     }
@@ -1176,108 +1278,117 @@ export default function Home() {
     setOutfitV2Generating(true);
     setOutfitV2Error('');
 
-    // 初始化生成结果数组
-    const initialResults = outfitV2SelectedCharacters.map(characterId => {
-      const character = characterOptions.find(c => c.id === characterId);
-      return {
-        character: characterId,
-        characterName: character?.label || characterId,
-        imageUrl: '',
-        status: 'generating' as const,
-      };
-    });
-    setOutfitV2GeneratedImages(initialResults);
+    // 初始化生成进度
+    setOutfitV2GenerateProgress({ total: extractedClothing.length, completed: 0 });
+
+    // 初始化所有提取的服装项为 generating 状态
+    const initialGeneratedImages = extractedClothing.reduce((acc, [indexStr, _]) => {
+      const index = parseInt(indexStr, 10);
+      acc[index] = { url: '', status: 'generating' };
+      return acc;
+    }, {} as typeof outfitV2GeneratedImages);
+    setOutfitV2GeneratedImages(initialGeneratedImages);
 
     try {
-      // 为每个选中的模特创建任务
-      const tasks = outfitV2SelectedCharacters.map(async (characterId) => {
-        const character = characterOptions.find(c => c.id === characterId);
+      console.log(`开始批量换装，共 ${extractedClothing.length} 张服装图片`);
 
+      // 第一步：并行创建所有任务（快速完成，每个 <5 秒）
+      const createTaskPromises = extractedClothing.map(async ([indexStr, data]) => {
+        const index = parseInt(indexStr, 10);
         try {
-          // 调用模特换装V2 API
           const createResponse = await fetch('/api/outfit-change-v2', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              clothingImageUrl: outfitV2ExtractedImage,
-              character: characterId,
+              clothingImageUrl: data.url,
+              character: outfitV2SelectedCharacters[0], // 使用第一个选中的模特
             }),
           });
 
           if (!createResponse.ok) {
             const errorData = await createResponse.json();
-            throw new Error(errorData.error || 'Task creation failed');
+            throw new Error(errorData.error || '任务创建失败');
           }
 
           const { taskId } = await createResponse.json();
-          console.log(`Outfit change V2 task created for ${character?.label}:`, taskId);
-
-          // 轮询任务状态
-          const maxAttempts = 60;
-          const pollInterval = 2000;
-
-          for (let attempt = 0; attempt < maxAttempts; attempt++) {
-            await new Promise(resolve => setTimeout(resolve, pollInterval));
-
-            const statusResponse = await fetch(`/api/task-status?taskId=${taskId}`);
-
-            if (!statusResponse.ok) {
-              console.warn('Failed to fetch task status, retrying...');
-              continue;
-            }
-
-            const statusData = await statusResponse.json();
-            console.log(`Task status for ${character?.label} (attempt ${attempt + 1}):`, statusData.status);
-
-            if (statusData.status === 'completed' && statusData.resultUrls?.[0]) {
-              // 更新该模特的生成结果
-              setOutfitV2GeneratedImages(prev =>
-                prev.map(item =>
-                  item.character === characterId
-                    ? { ...item, imageUrl: statusData.resultUrls[0], status: 'completed' as const }
-                    : item
-                )
-              );
-              console.log(`✅ Outfit change V2 completed for ${character?.label}`);
-              return { character: characterId, success: true, imageUrl: statusData.resultUrls[0] };
-            }
-
-            if (statusData.status === 'failed') {
-              throw new Error('模特换装生成失败');
-            }
-          }
-
-          throw new Error('模特换装生成超时');
+          console.log(`✅ 服装 #${index + 1} 任务创建成功: ${taskId}`);
+          return { index, taskId, success: true };
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : '模特换装生成失败';
-          console.error(`❌ Error generating outfit change for ${character?.label}:`, errorMessage);
+          const errorMessage = error instanceof Error ? error.message : '任务创建失败';
+          console.error(`❌ 服装 #${index + 1} 任务创建失败:`, errorMessage);
 
-          // 更新该模特的失败状态
-          setOutfitV2GeneratedImages(prev =>
-            prev.map(item =>
-              item.character === characterId
-                ? { ...item, status: 'failed' as const, error: errorMessage }
-                : item
-            )
-          );
-          return { character: characterId, success: false, error: errorMessage };
+          // 立即标记为失败
+          setOutfitV2GeneratedImages(prev => ({
+            ...prev,
+            [index]: { url: '', status: 'failed', error: errorMessage }
+          }));
+
+          return { index, taskId: '', success: false, error: errorMessage };
         }
       });
 
-      // 等待所有任务完成
-      const results = await Promise.all(tasks);
-      const successCount = results.filter(r => r.success).length;
-      const failCount = results.filter(r => !r.success).length;
+      const taskResults = await Promise.all(createTaskPromises);
+      const successfulTasks = taskResults.filter(t => t.success);
+      console.log(`任务创建完成: ${successfulTasks.length}/${extractedClothing.length} 个成功`);
 
-      if (failCount > 0) {
-        setOutfitV2Error(`批量生成完成：${successCount} 个成功，${failCount} 个失败`);
+      if (successfulTasks.length === 0) {
+        throw new Error('所有任务创建失败');
       }
 
-      console.log('✅ Batch outfit change completed:', { successCount, failCount });
+      // 第二步：并行轮询所有成功创建的任务
+      const pollPromises = successfulTasks.map(async ({ index, taskId }) => {
+        try {
+          const generatedUrl = await pollTaskStatus(taskId, 60);
+
+          // 更新成功状态
+          setOutfitV2GeneratedImages(prev => ({
+            ...prev,
+            [index]: { url: generatedUrl, status: 'completed' }
+          }));
+
+          // 更新进度
+          setOutfitV2GenerateProgress(prev => ({
+            total: prev?.total || 0,
+            completed: (prev?.completed || 0) + 1
+          }));
+
+          console.log(`✅ 服装 #${index + 1} 换装完成`);
+          return { index, success: true, url: generatedUrl };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : '换装失败';
+          console.error(`❌ 服装 #${index + 1} 换装失败:`, errorMessage);
+
+          // 更新失败状态
+          setOutfitV2GeneratedImages(prev => ({
+            ...prev,
+            [index]: { url: '', status: 'failed', error: errorMessage }
+          }));
+
+          // 即使失败也更新进度
+          setOutfitV2GenerateProgress(prev => ({
+            total: prev?.total || 0,
+            completed: (prev?.completed || 0) + 1
+          }));
+
+          return { index, success: false, error: errorMessage };
+        }
+      });
+
+      const pollResults = await Promise.all(pollPromises);
+      const finalSuccessCount = pollResults.filter(r => r.success).length;
+      const finalFailCount = pollResults.filter(r => !r.success).length;
+
+      if (finalFailCount > 0) {
+        setOutfitV2Error(`批量换装完成：${finalSuccessCount} 个成功，${finalFailCount} 个失败`);
+      }
+
+      console.log('✅ 批量换装全部完成:', { successCount: finalSuccessCount, failCount: finalFailCount });
     } catch (error) {
-      setOutfitV2Error(error instanceof Error ? error.message : 'Batch outfit change failed');
+      const errorMessage = error instanceof Error ? error.message : '批量换装失败';
+      setOutfitV2Error(errorMessage);
+      console.error('❌ 批量换装错误:', errorMessage);
     } finally {
       setOutfitV2Generating(false);
     }
@@ -1304,11 +1415,13 @@ export default function Home() {
   };
 
   const clearOutfitV2 = () => {
-    setOutfitV2OriginalFile(null);
-    setOutfitV2OriginalPreview('');
-    setOutfitV2ExtractedImage(null);
+    setOutfitV2OriginalFiles([]);
+    setOutfitV2OriginalPreviews([]);
+    setOutfitV2ExtractedImages({});
+    setOutfitV2GeneratedImages({});
     setOutfitV2SelectedCharacters([]);
-    setOutfitV2GeneratedImages([]);
+    setOutfitV2ExtractProgress({ total: 0, completed: 0 });
+    setOutfitV2GenerateProgress({ total: 0, completed: 0 });
     setOutfitV2Error('');
   };
 
@@ -2555,9 +2668,9 @@ export default function Home() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-semibold text-gray-700">
-                    步骤 1：上传图片并提取服装
+                    步骤 1：批量上传图片并提取服装
                   </h2>
-                  {outfitV2OriginalFile && (
+                  {outfitV2OriginalFiles.length > 0 && (
                     <button
                       onClick={clearOutfitV2}
                       className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white font-medium px-4 py-2 rounded-lg transition-colors"
@@ -2571,7 +2684,7 @@ export default function Home() {
                 </div>
 
                 {/* Upload Area */}
-                {!outfitV2OriginalFile ? (
+                {outfitV2OriginalFiles.length === 0 ? (
                   <label
                     htmlFor="outfit-v2-upload"
                     className={`flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer transition-all ${
@@ -2605,11 +2718,11 @@ export default function Home() {
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                           </svg>
-                          上传包含人物和服装的图片
+                          批量上传包含服装的图片
                         </div>
                       </div>
                       <p className="text-sm text-gray-500">
-                        支持 JPEG、PNG、GIF 格式
+                        支持 JPEG、PNG、GIF 格式，可一次上传多张图片
                       </p>
                     </div>
                     <input
@@ -2617,27 +2730,14 @@ export default function Home() {
                       type="file"
                       className="hidden"
                       accept="image/*"
+                      multiple
                       onChange={handleOutfitV2FileChange}
                     />
                   </label>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Original Image */}
+                  <div className="space-y-6">
+                    {/* Options Section */}
                     <div className="space-y-3">
-                      <h3 className="text-lg font-semibold text-gray-700 flex items-center gap-2">
-                        <span className="text-xl">📸</span>
-                        <span>原始图片</span>
-                      </h3>
-                      <div className="relative w-full h-96 bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200">
-                        <Image
-                          src={outfitV2OriginalPreview}
-                          alt="原始图片"
-                          fill
-                          className="object-contain"
-                          unoptimized
-                        />
-                      </div>
-
                       {/* Extract Top Only Option */}
                       <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg p-4 border border-blue-200">
                         <label className="flex items-center cursor-pointer group">
@@ -2690,45 +2790,101 @@ export default function Home() {
 
                       <button
                         onClick={handleOutfitV2ExtractClothing}
-                        disabled={outfitV2ExtractingClothing || !!outfitV2ExtractedImage}
+                        disabled={outfitV2ExtractingClothing || Object.keys(outfitV2ExtractedImages).length > 0}
                         className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100"
                       >
                         {outfitV2ExtractingClothing ? (
                           <div className="flex items-center justify-center gap-3">
                             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                            <span>AI 提取中...</span>
+                            <span>批量提取中... ({outfitV2ExtractProgress?.completed || 0}/{outfitV2ExtractProgress?.total || 0})</span>
                           </div>
-                        ) : outfitV2ExtractedImage ? (
-                          '✅ 提取完成'
+                        ) : Object.keys(outfitV2ExtractedImages).length > 0 ? (
+                          `✅ 已提取 ${Object.keys(outfitV2ExtractedImages).length} 张服装`
                         ) : (
-                          '提取服装'
+                          `批量提取服装 (${outfitV2OriginalFiles.length} 张图片)`
                         )}
                       </button>
                     </div>
 
-                    {/* Extracted Clothing */}
-                    {outfitV2ExtractedImage && (
-                      <div className="space-y-3">
-                        <h3 className="text-lg font-semibold text-gray-700 flex items-center gap-2">
-                          <span className="text-xl">👔</span>
-                          <span>提取的服装</span>
-                        </h3>
-                        <div className="relative w-full h-96 bg-gray-100 rounded-lg overflow-hidden border-2 border-green-500">
-                          <Image
-                            src={outfitV2ExtractedImage}
-                            alt="提取的服装"
-                            fill
-                            className="object-contain"
-                            unoptimized
-                          />
+                    {/* Images Grid */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {outfitV2OriginalPreviews.map((preview, index) => (
+                        <div key={index} className="space-y-2">
+                          <div className="relative w-full bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200" style={{ aspectRatio: '3 / 4' }}>
+                            <Image
+                              src={preview}
+                              alt={`原图 ${index + 1}`}
+                              fill
+                              className="object-cover"
+                              unoptimized
+                            />
+                            <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
+                              #{index + 1}
+                            </div>
+                          </div>
+
+                          {/* Extraction Status */}
+                          {outfitV2ExtractedImages[index] && (
+                            <div className="relative w-full bg-gray-100 rounded-lg overflow-hidden border-2 border-green-500" style={{ aspectRatio: '3 / 4' }}>
+                              {outfitV2ExtractedImages[index].status === 'extracting' && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                                </div>
+                              )}
+                              {outfitV2ExtractedImages[index].status === 'completed' && (
+                                <>
+                                  <Image
+                                    src={outfitV2ExtractedImages[index].url}
+                                    alt={`提取的服装 ${index + 1}`}
+                                    fill
+                                    className="object-contain"
+                                    unoptimized
+                                  />
+                                  <div className="absolute bottom-2 left-2 bg-green-500 text-white text-xs px-2 py-1 rounded">
+                                    ✅ 已提取
+                                  </div>
+                                </>
+                              )}
+                              {outfitV2ExtractedImages[index].status === 'failed' && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-red-100 text-red-600 text-xs p-2 text-center">
+                                  ❌ {outfitV2ExtractedImages[index].error || '提取失败'}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Generation Status */}
+                          {outfitV2GeneratedImages[index] && (
+                            <div className="relative w-full bg-gray-100 rounded-lg overflow-hidden border-2 border-purple-500" style={{ aspectRatio: '3 / 4' }}>
+                              {outfitV2GeneratedImages[index].status === 'generating' && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                                </div>
+                              )}
+                              {outfitV2GeneratedImages[index].status === 'completed' && (
+                                <>
+                                  <Image
+                                    src={outfitV2GeneratedImages[index].url}
+                                    alt={`换装结果 ${index + 1}`}
+                                    fill
+                                    className="object-cover"
+                                    unoptimized
+                                  />
+                                  <div className="absolute bottom-2 left-2 bg-purple-500 text-white text-xs px-2 py-1 rounded">
+                                    ✅ 已换装
+                                  </div>
+                                </>
+                              )}
+                              {outfitV2GeneratedImages[index].status === 'failed' && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-red-100 text-red-600 text-xs p-2 text-center">
+                                  ❌ {outfitV2GeneratedImages[index].error || '换装失败'}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        <div className="bg-green-50 p-3 rounded-lg border border-green-200">
-                          <p className="text-sm text-green-800 text-center font-medium">
-                            ✅ 服装提取成功，可以继续下一步
-                          </p>
-                        </div>
-                      </div>
-                    )}
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -2741,7 +2897,7 @@ export default function Home() {
               </div>
 
               {/* Step 2: Select Model & Generate */}
-              {outfitV2ExtractedImage && (
+              {Object.keys(outfitV2ExtractedImages).length > 0 && (
                 <>
                   <div className="border-t border-gray-200 pt-6 space-y-4">
                     <div className="flex items-center justify-between">
@@ -2837,7 +2993,7 @@ export default function Home() {
 
                   <div className="border-t border-gray-200 pt-6 space-y-4">
                     <h2 className="text-2xl font-semibold text-gray-700">
-                      步骤 3：生成换装图片
+                      步骤 3：批量生成换装图片
                     </h2>
 
                     {outfitV2SelectedCharacters.length > 0 ? (
@@ -2849,10 +3005,10 @@ export default function Home() {
                         {outfitV2Generating ? (
                           <div className="flex items-center justify-center gap-3">
                             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                            <span>批量生成中... (共 {outfitV2SelectedCharacters.length} 个)</span>
+                            <span>批量换装中... ({outfitV2GenerateProgress?.completed || 0}/{outfitV2GenerateProgress?.total || 0} 张服装)</span>
                           </div>
                         ) : (
-                          `批量生成换装图片 (${outfitV2SelectedCharacters.length} 个)`
+                          `批量生成换装图片 (${Object.values(outfitV2ExtractedImages).filter(img => img.status === 'completed').length} 张服装)`
                         )}
                       </button>
                     ) : (
@@ -2863,95 +3019,24 @@ export default function Home() {
                       </div>
                     )}
 
-                    {/* Generated Images Result */}
-                    {outfitV2GeneratedImages.length > 0 && (
-                      <div className="space-y-4">
+                    {/* Progress Summary */}
+                    {Object.keys(outfitV2GeneratedImages).length > 0 && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                         <div className="flex items-center justify-between">
-                          <h3 className="text-xl font-semibold text-gray-700">生成结果：</h3>
+                          <h3 className="text-lg font-semibold text-gray-700">生成进度：</h3>
                           <div className="flex gap-2 text-sm">
                             <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full font-medium">
-                              成功: {outfitV2GeneratedImages.filter(img => img.status === 'completed').length}
+                              成功: {Object.values(outfitV2GeneratedImages).filter(img => img.status === 'completed').length}
                             </span>
                             <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full font-medium">
-                              生成中: {outfitV2GeneratedImages.filter(img => img.status === 'generating').length}
+                              生成中: {Object.values(outfitV2GeneratedImages).filter(img => img.status === 'generating').length}
                             </span>
-                            {outfitV2GeneratedImages.filter(img => img.status === 'failed').length > 0 && (
+                            {Object.values(outfitV2GeneratedImages).filter(img => img.status === 'failed').length > 0 && (
                               <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full font-medium">
-                                失败: {outfitV2GeneratedImages.filter(img => img.status === 'failed').length}
+                                失败: {Object.values(outfitV2GeneratedImages).filter(img => img.status === 'failed').length}
                               </span>
                             )}
                           </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {outfitV2GeneratedImages.map((item, idx) => (
-                            <div
-                              key={idx}
-                              className={`border-2 rounded-lg p-4 transition-all ${
-                                item.status === 'completed'
-                                  ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-200'
-                                  : item.status === 'generating'
-                                  ? 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200'
-                                  : 'bg-gradient-to-br from-red-50 to-pink-50 border-red-200'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-semibold text-gray-800">{item.characterName}</span>
-                                </div>
-                                {item.status === 'completed' && (
-                                  <div className="flex-shrink-0 bg-green-500 rounded-full p-1">
-                                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                  </div>
-                                )}
-                                {item.status === 'generating' && (
-                                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
-                                )}
-                                {item.status === 'failed' && (
-                                  <div className="flex-shrink-0 bg-red-500 rounded-full p-1">
-                                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                  </div>
-                                )}
-                              </div>
-
-                              {item.status === 'completed' && item.imageUrl && (
-                                <div className="relative w-full bg-gray-100 rounded-lg overflow-hidden" style={{ aspectRatio: '9 / 16' }}>
-                                  <Image
-                                    src={item.imageUrl}
-                                    alt={item.characterName}
-                                    fill
-                                    className="object-contain"
-                                    unoptimized
-                                  />
-                                </div>
-                              )}
-
-                              {item.status === 'generating' && (
-                                <div className="relative w-full bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center" style={{ aspectRatio: '9 / 16' }}>
-                                  <div className="text-center">
-                                    <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-500 mx-auto mb-3"></div>
-                                    <p className="text-blue-600 font-medium">生成中...</p>
-                                  </div>
-                                </div>
-                              )}
-
-                              {item.status === 'failed' && (
-                                <div className="relative w-full bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center" style={{ aspectRatio: '9 / 16' }}>
-                                  <div className="text-center text-red-600 p-4">
-                                    <svg className="w-12 h-12 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <p className="font-medium mb-1">生成失败</p>
-                                    {item.error && <p className="text-xs text-gray-600">{item.error}</p>}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          ))}
                         </div>
                       </div>
                     )}
@@ -2963,14 +3048,14 @@ export default function Home() {
               <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                 <h3 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
                   <span className="text-lg">ℹ️</span>
-                  <span>工作流程说明：</span>
+                  <span>批量换装工作流程说明：</span>
                 </h3>
                 <ol className="list-decimal list-inside space-y-2 text-sm text-blue-800">
-                  <li>上传一张包含人物和服装的图片</li>
-                  <li>点击&ldquo;提取服装&rdquo;按钮，AI 会自动移除人物，只保留服装</li>
+                  <li>批量上传多张包含人物和服装的图片（支持一次上传多张）</li>
+                  <li>点击&ldquo;批量提取服装&rdquo;按钮，AI 会并行处理所有图片，自动移除人物，只保留服装</li>
                   <li>从模特库中选择一个目标模特</li>
-                  <li>点击&ldquo;生成模特换装图片&rdquo;，AI 会将提取的服装穿到选定的模特身上</li>
-                  <li>整个过程使用多图输入技术，确保服装细节和模特特征都得到完整保留</li>
+                  <li>点击&ldquo;批量生成换装图片&rdquo;，AI 会将所有提取的服装并行换装到选定的模特身上</li>
+                  <li>整个过程使用并行处理技术，大幅提升批量处理速度，并确保服装细节和模特特征都得到完整保留</li>
                 </ol>
               </div>
             </div>
