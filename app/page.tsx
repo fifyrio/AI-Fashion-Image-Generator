@@ -2603,17 +2603,51 @@ export default function Home() {
                           <div className="space-y-4">
                             <div className="flex items-center justify-between">
                               <h3 className="text-xl font-semibold text-gray-700">生成结果：</h3>
-                              <div className="flex gap-2 text-sm">
-                                <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full font-medium">
-                                  成功: {modelPoseGeneratedImages.filter(img => img.status === 'completed').length}
-                                </span>
-                                <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full font-medium">
-                                  生成中: {modelPoseGeneratedImages.filter(img => img.status === 'generating').length}
-                                </span>
-                                {modelPoseGeneratedImages.filter(img => img.status === 'failed').length > 0 && (
-                                  <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full font-medium">
-                                    失败: {modelPoseGeneratedImages.filter(img => img.status === 'failed').length}
+                              <div className="flex gap-2 items-center">
+                                <div className="flex gap-2 text-sm">
+                                  <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full font-medium">
+                                    成功: {modelPoseGeneratedImages.filter(img => img.status === 'completed').length}
                                   </span>
+                                  <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full font-medium">
+                                    生成中: {modelPoseGeneratedImages.filter(img => img.status === 'generating').length}
+                                  </span>
+                                  {modelPoseGeneratedImages.filter(img => img.status === 'failed').length > 0 && (
+                                    <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full font-medium">
+                                      失败: {modelPoseGeneratedImages.filter(img => img.status === 'failed').length}
+                                    </span>
+                                  )}
+                                </div>
+                                {modelPoseGeneratedImages.filter(img => img.status === 'completed').length > 0 && (
+                                  <button
+                                    onClick={async () => {
+                                      const completedImages = modelPoseGeneratedImages.filter(img => img.status === 'completed');
+                                      for (let i = 0; i < completedImages.length; i++) {
+                                        const item = completedImages[i];
+                                        try {
+                                          // 使用代理 API 下载图片
+                                          const downloadUrl = `/api/download?url=${encodeURIComponent(item.imageUrl)}&filename=model-pose-${item.poseIndex + 1}.png`;
+                                          const a = document.createElement('a');
+                                          a.href = downloadUrl;
+                                          a.download = `model-pose-${item.poseIndex + 1}.png`;
+                                          document.body.appendChild(a);
+                                          a.click();
+                                          document.body.removeChild(a);
+                                          // 添加延迟避免浏览器阻止多个下载
+                                          if (i < completedImages.length - 1) {
+                                            await new Promise(resolve => setTimeout(resolve, 500));
+                                          }
+                                        } catch (error) {
+                                          console.error(`下载图片 ${item.poseIndex + 1} 失败:`, error);
+                                        }
+                                      }
+                                    }}
+                                    className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:from-blue-600 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-medium"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                    一键下载
+                                  </button>
                                 )}
                               </div>
                             </div>

@@ -26,8 +26,43 @@ function toWebStream(stream: Readable): ReadableStream<Uint8Array> {
 
 export async function GET(request: NextRequest) {
   const keyParam = request.nextUrl.searchParams.get('key');
+  const urlParam = request.nextUrl.searchParams.get('url');
+  const filenameParam = request.nextUrl.searchParams.get('filename');
+
+  // 如果提供了 url 参数，则从外部 URL 下载
+  if (urlParam) {
+    try {
+      const imageUrl = decodeURIComponent(urlParam);
+      const filename = filenameParam ? decodeURIComponent(filenameParam) : 'download.png';
+
+      // 使用 fetch 获取外部图片
+      const response = await fetch(imageUrl);
+      if (!response.ok) {
+        return NextResponse.json({ error: 'failed to fetch image from URL' }, { status: 500 });
+      }
+
+      const blob = await response.blob();
+      const contentType = response.headers.get('content-type') ?? 'image/png';
+
+      return new NextResponse(blob, {
+        status: 200,
+        headers: {
+          'Content-Type': contentType,
+          'Content-Disposition': `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(
+            filename
+          )}`,
+          'Cache-Control': 'private, max-age=0, must-revalidate',
+        },
+      });
+    } catch (error) {
+      console.error('Failed to download image from URL:', error);
+      return NextResponse.json({ error: 'failed to download image from URL' }, { status: 500 });
+    }
+  }
+
+  // 原有的从 R2 下载逻辑
   if (!keyParam) {
-    return NextResponse.json({ error: 'missing key parameter' }, { status: 400 });
+    return NextResponse.json({ error: 'missing key or url parameter' }, { status: 400 });
   }
 
   const objectKey = decodeURIComponent(keyParam);
