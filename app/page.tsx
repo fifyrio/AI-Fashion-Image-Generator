@@ -52,7 +52,7 @@ type GeneratedImage = {
   character: string;
 };
 
-type TabType = 'outfit-change' | 'scene-pose' | 'model-pose' | 'outfit-change-v2' | 'mimic-reference';
+type TabType = 'outfit-change' | 'scene-pose' | 'model-pose' | 'outfit-change-v2' | 'mimic-reference' | 'copywriting';
 
 interface ScenePoseSuggestion {
   scene: string;
@@ -165,6 +165,15 @@ export default function Home() {
   const [mimicRefCharacter, setMimicRefCharacter] = useState<string>(DEFAULT_CHARACTER_ID);
   const [mimicRefGenerating, setMimicRefGenerating] = useState(false);
   const [mimicRefGeneratedImage, setMimicRefGeneratedImage] = useState<string | null>(null);
+
+  // Copywriting tab states
+  const [copywritingInput, setCopywritingInput] = useState<string>('');
+  const [copywritingGenerating, setCopywritingGenerating] = useState(false);
+  const [copywritingResults, setCopywritingResults] = useState<Array<{
+    analysis: string;
+    copywriting: string[];
+  }> | null>(null);
+  const [copywritingError, setCopywritingError] = useState<string>('');
 
   const clearMockProgressTimers = () => {
     if (progressIntervalRef.current) {
@@ -1639,6 +1648,42 @@ export default function Home() {
     }
   };
 
+  // Copywriting handlers
+  const handleCopywritingGenerate = async () => {
+    if (!copywritingInput.trim()) {
+      setCopywritingError('请输入文案内容');
+      return;
+    }
+
+    setCopywritingGenerating(true);
+    setCopywritingError('');
+    setCopywritingResults(null);
+
+    try {
+      const response = await fetch('/api/generate-similar-copywriting', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ originalCopy: copywritingInput })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || '生成失败');
+      }
+
+      const data = await response.json();
+      setCopywritingResults([{
+        analysis: data.analysis,
+        copywriting: data.similarCopywriting
+      }]);
+    } catch (error) {
+      console.error('生成文案失败:', error);
+      setCopywritingError(error instanceof Error ? error.message : '生成失败，请重试');
+    } finally {
+      setCopywritingGenerating(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-8">
       <div className="max-w-6xl mx-auto">
@@ -1721,6 +1766,19 @@ export default function Home() {
               <div className="flex items-center justify-center gap-2">
                 <span className="text-xl">📸</span>
                 <span>模仿参考图片</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('copywriting')}
+              className={`flex-1 px-6 py-4 text-lg font-semibold transition-all ${
+                activeTab === 'copywriting'
+                  ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-xl">✍️</span>
+                <span>生成类似文案</span>
               </div>
             </button>
           </div>
@@ -3432,6 +3490,128 @@ export default function Home() {
                   <li>AI 会详细分析图片中的场景环境特征（背景、光线、氛围等）</li>
                   <li>AI 会详细描述模特的姿势和动作细节</li>
                   <li>您可以使用这些详细描述在图像生成工具中重现相似的场景和姿势</li>
+                </ol>
+              </div>
+            </div>
+          )}
+
+          {/* Copywriting Tab Content */}
+          {activeTab === 'copywriting' && (
+            <div className="space-y-6">
+              <div className="bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg p-6 border border-pink-200">
+                <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  <span className="text-3xl">✍️</span>
+                  <span>生成类似爆款文案</span>
+                </h2>
+                <p className="text-gray-600">
+                  输入您的原始文案，AI 会分析其爆款要素，然后生成 3 个类似风格的文案，帮助您创作更多优质内容。
+                </p>
+              </div>
+
+              {/* Input Area */}
+              <div className="space-y-4">
+                <label className="block">
+                  <span className="text-lg font-semibold text-gray-700 mb-2 block">
+                    输入原始文案：
+                  </span>
+                  <textarea
+                    value={copywritingInput}
+                    onChange={(e) => setCopywritingInput(e.target.value)}
+                    placeholder="请输入您想要分析和模仿的文案内容..."
+                    className="w-full h-40 px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all resize-none text-gray-800"
+                  />
+                </label>
+
+                {/* Generate Button */}
+                <button
+                  onClick={handleCopywritingGenerate}
+                  disabled={copywritingGenerating || !copywritingInput.trim()}
+                  className="w-full bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100 shadow-lg"
+                >
+                  {copywritingGenerating ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></span>
+                      AI 正在分析并生成文案...
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="text-xl">✨</span>
+                      生成类似文案
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* Error Message */}
+              {copywritingError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <p className="text-red-600 font-medium">{copywritingError}</p>
+                </div>
+              )}
+
+              {/* Results */}
+              {copywritingResults && copywritingResults.length > 0 && (
+                <div className="space-y-6">
+                  {/* Analysis */}
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-200">
+                    <h3 className="text-xl font-bold text-gray-800 mb-3 flex items-center gap-2">
+                      <span className="text-2xl">📊</span>
+                      <span>爆款分析：</span>
+                    </h3>
+                    <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
+                      {copywritingResults[0].analysis}
+                    </div>
+                  </div>
+
+                  {/* Generated Copywriting */}
+                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-6 border border-green-200">
+                    <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                      <span className="text-2xl">🎯</span>
+                      <span>生成的类似文案：</span>
+                    </h3>
+                    <div className="space-y-4">
+                      {copywritingResults[0].copywriting.map((copy, index) => (
+                        <div
+                          key={index}
+                          className="bg-white rounded-lg p-5 border-2 border-green-200 hover:border-green-400 transition-all"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-500 text-white rounded-full flex items-center justify-center font-bold">
+                              {index + 1}
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-gray-800 whitespace-pre-wrap leading-relaxed">
+                                {copy}
+                              </p>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(copy);
+                                  alert('文案已复制到剪贴板！');
+                                }}
+                                className="mt-3 text-sm text-green-600 hover:text-green-700 font-medium flex items-center gap-1"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                                复制文案
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Usage Instructions */}
+              <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">📖 使用说明：</h3>
+                <ol className="list-decimal list-inside space-y-2 text-gray-600">
+                  <li>在输入框中粘贴或输入您想要分析的爆款文案</li>
+                  <li>点击&ldquo;生成类似文案&rdquo;按钮，AI 将分析文案的爆款要素</li>
+                  <li>AI 会生成 3 个风格相似的文案，每个文案都包含相关的 hashtag</li>
+                  <li>点击&ldquo;复制文案&rdquo;按钮即可快速复制到剪贴板使用</li>
                 </ol>
               </div>
             </div>
