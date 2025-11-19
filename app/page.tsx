@@ -168,6 +168,7 @@ export default function Home() {
 
   // Copywriting tab states
   const [copywritingInput, setCopywritingInput] = useState<string>('');
+  const [copywritingTargetAudience, setCopywritingTargetAudience] = useState<'male' | 'female'>('female');
   const [copywritingGenerating, setCopywritingGenerating] = useState(false);
   const [copywritingResults, setCopywritingResults] = useState<Array<{
     analysis: string;
@@ -1663,7 +1664,10 @@ export default function Home() {
       const response = await fetch('/api/generate-similar-copywriting', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ originalCopy: copywritingInput })
+        body: JSON.stringify({
+          originalCopy: copywritingInput,
+          targetAudience: copywritingTargetAudience
+        })
       });
 
       if (!response.ok) {
@@ -3521,6 +3525,44 @@ export default function Home() {
                     className="w-full h-40 px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all resize-none text-gray-800"
                   />
                 </label>
+
+                {/* Target Audience Selection */}
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-4 border border-purple-200">
+                  <label className="block">
+                    <span className="text-base font-semibold text-gray-700 mb-3 block flex items-center gap-2">
+                      <span className="text-xl">🎯</span>
+                      <span>目标群体：</span>
+                    </span>
+                    <div className="flex gap-4">
+                      <button
+                        onClick={() => setCopywritingTargetAudience('female')}
+                        className={`flex-1 py-3 px-6 rounded-lg font-medium transition-all ${
+                          copywritingTargetAudience === 'female'
+                            ? 'bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-lg transform scale-105'
+                            : 'bg-white text-gray-600 border-2 border-gray-300 hover:border-purple-400'
+                        }`}
+                      >
+                        <span className="flex items-center justify-center gap-2">
+                          <span className="text-xl">👧</span>
+                          <span>女生</span>
+                        </span>
+                      </button>
+                      <button
+                        onClick={() => setCopywritingTargetAudience('male')}
+                        className={`flex-1 py-3 px-6 rounded-lg font-medium transition-all ${
+                          copywritingTargetAudience === 'male'
+                            ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg transform scale-105'
+                            : 'bg-white text-gray-600 border-2 border-gray-300 hover:border-blue-400'
+                        }`}
+                      >
+                        <span className="flex items-center justify-center gap-2">
+                          <span className="text-xl">👦</span>
+                          <span>男生</span>
+                        </span>
+                      </button>
+                    </div>
+                  </label>
+                </div>
 
                 {/* Generate Button */}
                 <button

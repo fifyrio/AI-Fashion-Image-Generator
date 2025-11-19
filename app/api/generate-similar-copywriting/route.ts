@@ -4,7 +4,7 @@ export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
-    const { originalCopy } = await request.json();
+    const { originalCopy, targetAudience = 'female' } = await request.json();
 
     if (!originalCopy) {
       return NextResponse.json(
@@ -13,7 +13,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('[generate-similar-copywriting] Analyzing copywriting...');
+    console.log('[generate-similar-copywriting] Analyzing copywriting...', {
+      targetAudience
+    });
 
     // 调用 OpenRouter API 进行文案分析和生成
     const apiKey = process.env.OPENROUTER_API_KEY;
@@ -21,9 +23,30 @@ export async function POST(request: NextRequest) {
       throw new Error('OPENROUTER_API_KEY not configured');
     }
 
+    // 根据目标群体调整提示词
+    const audienceDescription = targetAudience === 'male'
+      ? '男性用户（关注实用性、性能、科技感、理性决策）'
+      : '女性用户（关注美感、情感共鸣、生活方式、感性表达）';
+
+    const audienceGuidelines = targetAudience === 'male'
+      ? `- 语气要直接、简洁、有力
+- 强调产品性能、实用价值、技术优势
+- 使用理性分析和数据支撑
+- hashtag偏向功能性、技术性、实用性
+- 减少过度修饰，增加客观描述
+- 可以使用幽默但不要过于花哨`
+      : `- 语气要亲切、温暖、有共鸣
+- 强调美感、情感价值、生活品质
+- 使用感性表达和情绪共鸣
+- hashtag偏向美学、情感、生活方式
+- 可以使用丰富的emoji和修辞手法
+- 注重细节描述和氛围营造`;
+
     const prompt = `你是一位专业的小红书爆款文案分析师和创作专家。
 
-请分析以下文案的爆款要素，然后生成 3 个风格相似的新文案。
+目标群体：${audienceDescription}
+
+请分析以下文案的爆款要素，然后生成 3 个针对目标群体的类似风格新文案。
 
 原始文案：
 ${originalCopy}
@@ -51,7 +74,9 @@ ${originalCopy}
 - 每个新文案都要包含相关的hashtag（至少5个）
 - hashtag要精准且有流量潜力
 - 文案要有吸引力和传播力
-- 保持小红书平台的特色`;
+- 保持小红书平台的特色
+- **重要**：生成的文案必须符合目标群体特征：
+${audienceGuidelines}`;
 
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
