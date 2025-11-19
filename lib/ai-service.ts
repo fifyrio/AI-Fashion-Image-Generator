@@ -7,6 +7,33 @@ import {
     XIAOHONGSHU_TITLE_PROMPT
 } from './prompts';
 
+// 辅助函数：从可能包含 markdown 代码块的字符串中提取 JSON
+function extractJsonFromMarkdown(content: string): string {
+    let jsonStr = content.trim();
+
+    // Strategy 1: Look for JSON within markdown code blocks with regex
+    const codeBlockMatch = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+    if (codeBlockMatch) {
+        return codeBlockMatch[1].trim();
+    }
+
+    // Strategy 2: Remove leading/trailing ``` if present
+    if (jsonStr.startsWith('```')) {
+        jsonStr = jsonStr.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?\s*```$/, '').trim();
+        return jsonStr;
+    }
+
+    // Strategy 3: Find the first { and last } to extract JSON object
+    const firstBrace = jsonStr.indexOf('{');
+    const lastBrace = jsonStr.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && firstBrace < lastBrace) {
+        return jsonStr.substring(firstBrace, lastBrace + 1);
+    }
+
+    // Return as-is if no extraction strategy worked
+    return jsonStr;
+}
+
 // AI服务类
 export class AIService {
     private client: OpenAI;
@@ -232,15 +259,7 @@ export class AIService {
                 console.log('✅ 响应内容:', responseContent);
 
                 // Extract JSON from response (handle markdown code blocks)
-                let jsonStr = responseContent.trim();
-
-                // Remove markdown code blocks if present
-                const jsonMatch = jsonStr.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
-                if (jsonMatch) {
-                    jsonStr = jsonMatch[1];
-                } else if (jsonStr.startsWith('```') && jsonStr.endsWith('```')) {
-                    jsonStr = jsonStr.replace(/```(?:json)?/g, '').trim();
-                }
+                const jsonStr = extractJsonFromMarkdown(responseContent);
 
                 const result = JSON.parse(jsonStr);
                 return result;
@@ -400,15 +419,7 @@ export class AIService {
                 console.log('✅ 响应内容:', responseContent);
 
                 // Extract JSON from response (handle markdown code blocks)
-                let jsonStr = responseContent.trim();
-
-                // Remove markdown code blocks if present
-                const jsonMatch = jsonStr.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
-                if (jsonMatch) {
-                    jsonStr = jsonMatch[1];
-                } else if (jsonStr.startsWith('```') && jsonStr.endsWith('```')) {
-                    jsonStr = jsonStr.replace(/```(?:json)?/g, '').trim();
-                }
+                const jsonStr = extractJsonFromMarkdown(responseContent);
 
                 const result = JSON.parse(jsonStr);
                 return result;
@@ -540,15 +551,7 @@ export class AIService {
                 console.log('✅ 响应内容:', responseContent);
 
                 // Extract JSON from response (handle markdown code blocks)
-                let jsonStr = responseContent.trim();
-
-                // Remove markdown code blocks if present
-                const jsonMatch = jsonStr.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
-                if (jsonMatch) {
-                    jsonStr = jsonMatch[1];
-                } else if (jsonStr.startsWith('```') && jsonStr.endsWith('```')) {
-                    jsonStr = jsonStr.replace(/```(?:json)?/g, '').trim();
-                }
+                const jsonStr = extractJsonFromMarkdown(responseContent);
 
                 const result = JSON.parse(jsonStr);
 
