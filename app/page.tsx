@@ -2224,15 +2224,17 @@ export default function Home() {
                 ) : (
                   <div className="space-y-4">
                     {/* Image Preview */}
-                    <div className="relative w-full h-96 bg-gray-100 rounded-lg overflow-hidden">
-                      <Image
-                        src={scenePosePreview}
-                        alt="上传的服装图片"
-                        fill
-                        className="object-contain"
-                        unoptimized
-                      />
-                    </div>
+                    {scenePosePreview && (
+                      <div className="relative w-full h-96 bg-gray-100 rounded-lg overflow-hidden">
+                        <Image
+                          src={scenePosePreview}
+                          alt="上传的服装图片"
+                          fill
+                          className="object-contain"
+                          unoptimized
+                        />
+                      </div>
+                    )}
 
                     {/* Analyze Button */}
                     <button
@@ -2425,15 +2427,17 @@ export default function Home() {
                 ) : (
                   <div className="space-y-4">
                     {/* Image Preview */}
-                    <div className="relative w-full h-96 bg-gray-100 rounded-lg overflow-hidden">
-                      <Image
-                        src={modelPosePreview}
-                        alt="上传的服装图片"
-                        fill
-                        className="object-contain"
-                        unoptimized
-                      />
-                    </div>
+                    {modelPosePreview && (
+                      <div className="relative w-full h-96 bg-gray-100 rounded-lg overflow-hidden">
+                        <Image
+                          src={modelPosePreview}
+                          alt="上传的服装图片"
+                          fill
+                          className="object-contain"
+                          unoptimized
+                        />
+                      </div>
+                    )}
 
                     {/* Phone Holding Option */}
                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
