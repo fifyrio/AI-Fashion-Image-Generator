@@ -121,6 +121,9 @@ export default function Home() {
     [index: number]: { url: string; status: 'extracting' | 'completed' | 'failed'; error?: string };
   }>({});
 
+  // 选中的服装索引（用于换装）
+  const [outfitV2SelectedClothing, setOutfitV2SelectedClothing] = useState<Set<number>>(new Set());
+
   const [outfitV2ExtractingClothing, setOutfitV2ExtractingClothing] = useState(false);
   const [outfitV2ExtractProgress, setOutfitV2ExtractProgress] = useState<{
     completed: number;
@@ -1246,6 +1249,12 @@ export default function Home() {
       setOutfitV2Stage('extracted');
       setOutfitV2ExtractProgress(null);
 
+      // 自动选中所有成功提取的服装
+      const successIndexes = results
+        .filter(r => r.success)
+        .map(r => r.index);
+      setOutfitV2SelectedClothing(new Set(successIndexes));
+
       if (failCount > 0) {
         setOutfitV2Error(`批量提取完成：${successCount} 个成功，${failCount} 个失败`);
       }
@@ -1259,14 +1268,43 @@ export default function Home() {
     }
   };
 
-  const handleOutfitV2Generate = async () => {
-    // 检查是否有成功提取的服装
-    const extractedClothing = Object.entries(outfitV2ExtractedImages).filter(
-      ([_, data]) => data.status === 'completed'
-    );
+  // 切换服装选择状态
+  const toggleOutfitV2ClothingSelection = (index: number) => {
+    setOutfitV2SelectedClothing(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(index)) {
+        newSet.delete(index);
+      } else {
+        newSet.add(index);
+      }
+      return newSet;
+    });
+  };
 
-    if (extractedClothing.length === 0) {
-      setOutfitV2Error('请先提取服装');
+  // 全选/全不选服装
+  const toggleOutfitV2SelectAllClothing = () => {
+    const completedIndexes = Object.entries(outfitV2ExtractedImages)
+      .filter(([_, data]) => data.status === 'completed')
+      .map(([index, _]) => parseInt(index, 10));
+
+    if (outfitV2SelectedClothing.size === completedIndexes.length) {
+      // 当前全选，则全不选
+      setOutfitV2SelectedClothing(new Set());
+    } else {
+      // 否则全选
+      setOutfitV2SelectedClothing(new Set(completedIndexes));
+    }
+  };
+
+  const handleOutfitV2Generate = async () => {
+    // 检查是否有选中的服装
+    const selectedClothingIndexes = Array.from(outfitV2SelectedClothing);
+    const selectedClothing = selectedClothingIndexes
+      .map(index => [index.toString(), outfitV2ExtractedImages[index]] as [string, typeof outfitV2ExtractedImages[number]])
+      .filter(([_, data]) => data && data.status === 'completed');
+
+    if (selectedClothing.length === 0) {
+      setOutfitV2Error('请先选择要换装的服装');
       return;
     }
 
@@ -1278,11 +1316,11 @@ export default function Home() {
     setOutfitV2Generating(true);
     setOutfitV2Error('');
 
-    // 初始化生成进度
-    setOutfitV2GenerateProgress({ total: extractedClothing.length, completed: 0 });
+    // 初始化生成进度（只针对选中的服装）
+    setOutfitV2GenerateProgress({ total: selectedClothing.length, completed: 0 });
 
-    // 初始化所有提取的服装项为 generating 状态
-    const initialGeneratedImages = extractedClothing.reduce((acc, [indexStr, _]) => {
+    // 初始化所有选中的服装项为 generating 状态
+    const initialGeneratedImages = selectedClothing.reduce((acc, [indexStr, _]) => {
       const index = parseInt(indexStr, 10);
       acc[index] = { url: '', status: 'generating' };
       return acc;
@@ -1290,10 +1328,10 @@ export default function Home() {
     setOutfitV2GeneratedImages(initialGeneratedImages);
 
     try {
-      console.log(`开始批量换装，共 ${extractedClothing.length} 张服装图片`);
+      console.log(`开始批量换装，共 ${selectedClothing.length} 张服装图片`);
 
       // 第一步：并行创建所有任务（快速完成，每个 <5 秒）
-      const createTaskPromises = extractedClothing.map(async ([indexStr, data]) => {
+      const createTaskPromises = selectedClothing.map(async ([indexStr, data]) => {
         const index = parseInt(indexStr, 10);
         try {
           const createResponse = await fetch('/api/outfit-change-v2', {
@@ -1331,7 +1369,7 @@ export default function Home() {
 
       const taskResults = await Promise.all(createTaskPromises);
       const successfulTasks = taskResults.filter(t => t.success);
-      console.log(`任务创建完成: ${successfulTasks.length}/${extractedClothing.length} 个成功`);
+      console.log(`任务创建完成: ${successfulTasks.length}/${selectedClothing.length} 个成功`);
 
       if (successfulTasks.length === 0) {
         throw new Error('所有任务创建失败');
@@ -1420,9 +1458,11 @@ export default function Home() {
     setOutfitV2ExtractedImages({});
     setOutfitV2GeneratedImages({});
     setOutfitV2SelectedCharacters([]);
+    setOutfitV2SelectedClothing(new Set());
     setOutfitV2ExtractProgress({ total: 0, completed: 0 });
     setOutfitV2GenerateProgress({ total: 0, completed: 0 });
     setOutfitV2Error('');
+    setOutfitV2Stage('upload');
   };
 
   // Mimic Reference handlers
@@ -2806,6 +2846,30 @@ export default function Home() {
                       </button>
                     </div>
 
+                    {/* Selection Controls - Show after extraction */}
+                    {Object.keys(outfitV2ExtractedImages).length > 0 && (
+                      <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-blue-800">
+                              已选择 {outfitV2SelectedClothing.size} / {Object.values(outfitV2ExtractedImages).filter(img => img.status === 'completed').length} 张服装
+                            </span>
+                          </div>
+                          <button
+                            onClick={toggleOutfitV2SelectAllClothing}
+                            className="text-sm bg-blue-500 hover:bg-blue-600 text-white font-medium px-4 py-2 rounded-lg transition-colors"
+                          >
+                            {outfitV2SelectedClothing.size === Object.values(outfitV2ExtractedImages).filter(img => img.status === 'completed').length
+                              ? '全不选'
+                              : '全选'}
+                          </button>
+                        </div>
+                        <p className="text-xs text-blue-600 mt-2">
+                          💡 点击服装图片可以选择或取消选择，只有选中的服装会用于换装
+                        </p>
+                      </div>
+                    )}
+
                     {/* Images Grid */}
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                       {outfitV2OriginalPreviews.map((preview, index) => (
@@ -2825,7 +2889,21 @@ export default function Home() {
 
                           {/* Extraction Status */}
                           {outfitV2ExtractedImages[index] && (
-                            <div className="relative w-full bg-gray-100 rounded-lg overflow-hidden border-2 border-green-500" style={{ aspectRatio: '3 / 4' }}>
+                            <div
+                              className={`relative w-full bg-gray-100 rounded-lg overflow-hidden border-2 cursor-pointer transition-all ${
+                                outfitV2ExtractedImages[index].status === 'completed'
+                                  ? outfitV2SelectedClothing.has(index)
+                                    ? 'border-blue-500 ring-4 ring-blue-200'
+                                    : 'border-green-500 hover:border-blue-400'
+                                  : 'border-green-500'
+                              }`}
+                              style={{ aspectRatio: '3 / 4' }}
+                              onClick={() => {
+                                if (outfitV2ExtractedImages[index].status === 'completed') {
+                                  toggleOutfitV2ClothingSelection(index);
+                                }
+                              }}
+                            >
                               {outfitV2ExtractedImages[index].status === 'extracting' && (
                                 <div className="absolute inset-0 flex items-center justify-center bg-black/50">
                                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
@@ -2840,6 +2918,20 @@ export default function Home() {
                                     className="object-contain"
                                     unoptimized
                                   />
+                                  {/* Selection Checkbox */}
+                                  <div className="absolute top-2 right-2">
+                                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                                      outfitV2SelectedClothing.has(index)
+                                        ? 'bg-blue-500 border-blue-500'
+                                        : 'bg-white border-gray-300'
+                                    }`}>
+                                      {outfitV2SelectedClothing.has(index) && (
+                                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                      )}
+                                    </div>
+                                  </div>
                                   <div className="absolute bottom-2 left-2 bg-green-500 text-white text-xs px-2 py-1 rounded">
                                     ✅ 已提取
                                   </div>
