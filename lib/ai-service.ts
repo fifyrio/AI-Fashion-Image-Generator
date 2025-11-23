@@ -14,23 +14,29 @@ function extractJsonFromMarkdown(content: string): string {
     // Strategy 1: Look for JSON within markdown code blocks with regex
     const codeBlockMatch = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
     if (codeBlockMatch) {
-        return codeBlockMatch[1].trim();
-    }
-
-    // Strategy 2: Remove leading/trailing ``` if present
-    if (jsonStr.startsWith('```')) {
+        jsonStr = codeBlockMatch[1].trim();
+    } else if (jsonStr.startsWith('```')) {
+        // Strategy 2: Remove leading/trailing ``` if present
         jsonStr = jsonStr.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?\s*```$/, '').trim();
-        return jsonStr;
+    } else {
+        // Strategy 3: Find the first { and last } to extract JSON object
+        const firstBrace = jsonStr.indexOf('{');
+        const lastBrace = jsonStr.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1 && firstBrace < lastBrace) {
+            jsonStr = jsonStr.substring(firstBrace, lastBrace + 1);
+        }
     }
 
-    // Strategy 3: Find the first { and last } to extract JSON object
-    const firstBrace = jsonStr.indexOf('{');
-    const lastBrace = jsonStr.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace !== -1 && firstBrace < lastBrace) {
-        return jsonStr.substring(firstBrace, lastBrace + 1);
-    }
+    // Strategy 4: Fix common JSON issues
+    // Fix trailing commas before ] or }
+    jsonStr = jsonStr.replace(/,\s*([}\]])/g, '$1');
 
-    // Return as-is if no extraction strategy worked
+    // Fix unescaped newlines in strings (common issue with AI-generated JSON)
+    // This replaces actual newlines inside JSON string values with \n
+    jsonStr = jsonStr.replace(/"([^"]*(?:\\.[^"]*)*)"/g, (match) => {
+        return match.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t');
+    });
+
     return jsonStr;
 }
 
@@ -335,21 +341,22 @@ export class AIService {
    - 手自然下垂或微微打开 → 展示整体服装轮廓
    - 手拿配饰/包包 → 展示搭配效果
 
-3. **身体角度的选择**：
-   - 正面 → 展示正面设计（印花、纽扣、领口等）
-   - 侧面 → 展示侧面剪裁、版型轮廓、开衩等
-   - 背面 → 展示背部设计（背部图案、拉链、蝴蝶结等）
-   - 3/4侧身 → 展示立体剪裁和整体搭配
+3. **身体角度的选择（重点增加背面和侧面）**：
+   - 正面 → 展示正面设计（印花、纽扣、领口等）- 最多2个正面姿势
+   - 侧面 → 展示侧面剪裁、版型轮廓、开衩等 - 至少2个侧面姿势
+   - 背面 → 展示背部设计（背部图案、拉链、蝴蝶结等）- 至少2个背面姿势
+   - 3/4侧身 → 展示立体剪裁和整体搭配 - 至少1个3/4侧身姿势
 
 4. **动态姿势的运用**：
    - 行走姿势 → 展示下装的动态效果（裙摆飘动、阔腿裤摆动等）
    - 转身姿势 → 展示服装的流动感和360度效果
-   - 坐姿 → 展示服装在不同状态下的版型保持
+   - 回眸姿势 → 背对镜头但头部转向镜头，展示服装背面和侧面
    - 手臂动作 → 展示袖子的活动范围和设计
+   - ❌ 不要使用坐姿 - 坐姿容易遮挡服装细节，不利于展示
 
 5. **姿势多样性**：
-   - 包含站姿、坐姿、行走、转身等不同类型
-   - 包含正面、侧面、背面等不同角度
+   - 全部使用站姿（包括行走、转身、静态站立等），不要坐姿
+   - 角度分布要求：至少2个背面、至少2个侧面、最多2个正面、至少1个3/4侧身
    - 包含静态和动态姿势的组合
    - 每个姿势都要强调不同的服装特点
 
@@ -386,7 +393,9 @@ export class AIService {
 - 每个姿势都要针对性地展示服装的某个具体设计特点
 - 描述要专业、客观，聚焦于服装本身
 - 姿势要自然、优雅，符合服装风格
-- 确保8个姿势各不相同，从多角度全方位展示服装`;
+- 确保8个姿势各不相同，从多角度全方位展示服装
+- ⚠️ **角度分布强制要求**：至少2个背面姿势、至少2个侧面姿势、最多2个正面姿势、至少1个3/4侧身姿势
+- ❌ **禁止使用坐姿** - 所有姿势必须是站立状态（包括行走、转身、静止站立等），不要有任何坐着的姿势`;
 
         const content: OpenAI.Chat.ChatCompletionContentPart[] = [
             {

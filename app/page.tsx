@@ -3065,6 +3065,25 @@ export default function Home() {
                                   <div className="absolute bottom-2 left-2 bg-purple-500 text-white text-xs px-2 py-1 rounded">
                                     ✅ 已换装
                                   </div>
+                                  {/* Download button */}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const a = document.createElement('a');
+                                      const downloadUrl = `/api/download?url=${encodeURIComponent(outfitV2GeneratedImages[index].url)}&filename=outfit-v2-${index + 1}.png`;
+                                      a.href = downloadUrl;
+                                      a.download = `outfit-v2-${index + 1}.png`;
+                                      document.body.appendChild(a);
+                                      a.click();
+                                      document.body.removeChild(a);
+                                    }}
+                                    className="absolute top-2 right-2 bg-white/90 hover:bg-white text-gray-700 hover:text-purple-600 rounded-full p-1.5 shadow-md transition-all"
+                                    title="下载图片"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                  </button>
                                 </>
                               )}
                               {outfitV2GeneratedImages[index].status === 'failed' && (
@@ -3230,6 +3249,36 @@ export default function Home() {
                             )}
                           </div>
                         </div>
+                        {/* Download All Button */}
+                        {Object.values(outfitV2GeneratedImages).filter(img => img.status === 'completed').length > 0 && (
+                          <div className="mt-4 pt-4 border-t border-blue-200">
+                            <button
+                              onClick={async () => {
+                                const completedImages = Object.entries(outfitV2GeneratedImages)
+                                  .filter(([, img]) => img.status === 'completed')
+                                  .map(([index, img]) => ({ index: Number(index), url: img.url }));
+
+                                for (const { index, url } of completedImages) {
+                                  const a = document.createElement('a');
+                                  const downloadUrl = `/api/download?url=${encodeURIComponent(url)}&filename=outfit-v2-${index + 1}.png`;
+                                  a.href = downloadUrl;
+                                  a.download = `outfit-v2-${index + 1}.png`;
+                                  document.body.appendChild(a);
+                                  a.click();
+                                  document.body.removeChild(a);
+                                  // 添加小延迟避免浏览器阻止多个下载
+                                  await new Promise(resolve => setTimeout(resolve, 300));
+                                }
+                              }}
+                              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold py-3 px-6 rounded-lg transition-all"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                              </svg>
+                              <span>一键下载全部图片 ({Object.values(outfitV2GeneratedImages).filter(img => img.status === 'completed').length} 张)</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
