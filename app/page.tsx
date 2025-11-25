@@ -124,6 +124,11 @@ export default function Home() {
   // 选中的服装索引（用于换装）
   const [outfitV2SelectedClothing, setOutfitV2SelectedClothing] = useState<Set<number>>(new Set());
 
+  // 服装描述（对应每张提取的服装）
+  const [outfitV2ClothingDescriptions, setOutfitV2ClothingDescriptions] = useState<{
+    [index: number]: string;
+  }>({});
+
   const [outfitV2ExtractingClothing, setOutfitV2ExtractingClothing] = useState(false);
   const [outfitV2ExtractProgress, setOutfitV2ExtractProgress] = useState<{
     completed: number;
@@ -1232,7 +1237,7 @@ export default function Home() {
           );
 
           console.log(`✅ Extraction ${index + 1} completed`);
-          return { index, success: true };
+          return { index, success: true, extractedUrl };
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : '提取失败';
 
@@ -1256,6 +1261,46 @@ export default function Home() {
       const successCount = results.filter(r => r.success).length;
       const failCount = results.filter(r => !r.success).length;
 
+      console.log('✅ Batch extraction completed:', { successCount, failCount });
+
+      // Step 4: 并行分析所有成功提取的服装
+      if (successCount > 0) {
+        console.log('🔍 开始分析提取的服装...');
+        const analyzePromises = results
+          .filter(r => r.success && r.extractedUrl)
+          .map(async (r) => {
+            try {
+              const response = await fetch('/api/analyze-clothing', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  imageUrl: r.extractedUrl,
+                  extractTopOnly: outfitV2ExtractTopOnly
+                })
+              });
+
+              if (!response.ok) {
+                throw new Error('分析失败');
+              }
+
+              const data = await response.json();
+              console.log(`✅ 服装 ${r.index + 1} 分析完成`);
+              return { index: r.index, description: data.analysis || '' };
+            } catch (error) {
+              console.error(`❌ 分析服装 ${r.index + 1} 失败:`, error);
+              return { index: r.index, description: '' };
+            }
+          });
+
+        const descriptions = await Promise.all(analyzePromises);
+        const descriptionsMap: { [key: number]: string } = {};
+        descriptions.forEach(d => {
+          descriptionsMap[d.index] = d.description;
+        });
+        setOutfitV2ClothingDescriptions(descriptionsMap);
+        console.log('✅ 服装分析全部完成');
+      }
+
       setOutfitV2Stage('extracted');
       setOutfitV2ExtractProgress(null);
 
@@ -1268,8 +1313,6 @@ export default function Home() {
       if (failCount > 0) {
         setOutfitV2Error(`批量提取完成：${successCount} 个成功，${failCount} 个失败`);
       }
-
-      console.log('✅ Batch extraction completed:', { successCount, failCount });
     } catch (error) {
       setOutfitV2Error(error instanceof Error ? error.message : '批量提取失败');
       setOutfitV2Stage('upload');
@@ -1466,6 +1509,7 @@ export default function Home() {
     setOutfitV2OriginalFiles([]);
     setOutfitV2OriginalPreviews([]);
     setOutfitV2ExtractedImages({});
+    setOutfitV2ClothingDescriptions({});
     setOutfitV2GeneratedImages({});
     setOutfitV2SelectedCharacters([]);
     setOutfitV2SelectedClothing(new Set());
@@ -3042,6 +3086,15 @@ export default function Home() {
                                   ❌ {outfitV2ExtractedImages[index].error || '提取失败'}
                                 </div>
                               )}
+                            </div>
+                          )}
+
+                          {/* Clothing Description */}
+                          {outfitV2ExtractedImages[index]?.status === 'completed' && outfitV2ClothingDescriptions[index] && (
+                            <div className="mt-2 p-2 bg-blue-50 rounded-lg border border-blue-200">
+                              <p className="text-xs text-gray-700 line-clamp-2">
+                                {outfitV2ClothingDescriptions[index]}
+                              </p>
                             </div>
                           )}
 

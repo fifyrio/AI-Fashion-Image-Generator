@@ -431,7 +431,18 @@ export class AIService {
                 const jsonStr = extractJsonFromMarkdown(responseContent);
 
                 const result = JSON.parse(jsonStr);
-                return result;
+
+                // Ensure description is a string
+                // If it's an object, convert it to a formatted string
+                let description = result.description;
+                if (typeof description === 'object' && description !== null) {
+                    description = JSON.stringify(description, null, 2);
+                }
+
+                return {
+                    description: String(description || ''),
+                    poses: Array.isArray(result.poses) ? result.poses : []
+                };
             }
 
             throw new Error('模特姿势列表生成失败：API响应格式错误或内容为空');
