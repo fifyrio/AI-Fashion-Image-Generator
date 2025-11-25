@@ -502,7 +502,79 @@ export class KIEImageService {
             // 使用换装V2的 prompt,如果开启动作微调则添加相关提示
             let prompt = OUTFIT_CHANGE_V2_PROMPT;
             if (adjustPose) {
-                prompt = prompt + `\n\n⚠️ **动作微调要求**：\n- 在保持上述所有要求的前提下，对模特的动作、姿势进行轻微的调整和变化\n- 可以微调手部动作、站姿角度、身体倾斜度、表情等\n- 确保每次生成的图片中模特的动作都有细微差异，避免完全一致\n- 但身材特征（身高、胖瘦、腿长、腿粗细等）绝对不能改变\n- 动作变化应该自然、优雅，符合整体风格`;
+                // 生成随机的姿势变化选项，增加多样性
+                const handPoses = [
+                    '右手自然下垂，左手轻轻搭在腰间',
+                    '双手自然垂放在身体两侧，手指微微张开',
+                    '右手插口袋，左手自然下垂',
+                    '左手插口袋，右手自然下垂',
+                    '双手轻轻交叉放在身前',
+                    '一只手轻扶头发，另一只手自然下垂',
+                    '一只手轻拉衣角，另一只手自然垂放',
+                    '双手轻轻搭在大腿上',
+                    '一只手叉腰，另一只手自然下垂',
+                    '双手轻握在身前'
+                ];
+
+                const bodyAngles = [
+                    '身体正对镜头',
+                    '身体微微向右侧转15度',
+                    '身体微微向左侧转15度',
+                    '肩膀微微倾斜，呈现放松姿态',
+                    '身体保持端正但放松的状态'
+                ];
+
+                const legPoses = [
+                    '双腿自然并拢站立',
+                    '左腿微微向前，右腿在后，重心在后腿',
+                    '右腿微微向前，左腿在后，重心在后腿',
+                    '双腿微微分开站立，重心均匀分布',
+                    '一条腿微屈，另一条腿伸直站立',
+                    '双腿自然交叉站立，呈现优雅姿态'
+                ];
+
+                // 使用时间戳作为随机种子，确保每次调用有不同的组合
+                const timestamp = Date.now();
+                const handIndex = timestamp % handPoses.length;
+                const bodyIndex = Math.floor(timestamp / 1000) % bodyAngles.length;
+                const legIndex = Math.floor(timestamp / 10000) % legPoses.length;
+
+                const selectedHandPose = handPoses[handIndex];
+                const selectedBodyAngle = bodyAngles[bodyIndex];
+                const selectedLegPose = legPoses[legIndex];
+
+                console.log(`🎲 Random pose selected:`);
+                console.log(`  Hand: ${selectedHandPose}`);
+                console.log(`  Body: ${selectedBodyAngle}`);
+                console.log(`  Legs: ${selectedLegPose}`);
+
+                prompt = prompt + `\n\n⚠️ **动作微调要求 - 必须严格执行以下姿势变化**：
+
+**🎯 核心原则：在保持模特身材、服装、背景完全不变的前提下，改变模特的姿势和动作**
+
+**📝 具体姿势要求（必须按照以下描述生成）：**
+
+1. **手部动作**：${selectedHandPose}
+
+2. **身体角度**：${selectedBodyAngle}
+
+3. **腿部姿势**：${selectedLegPose}
+   （⚠️ 注意：改变腿部姿势时，腿的长度、粗细、形状必须与第二张图完全一致，只改变腿的摆放角度和站姿，不改变腿的任何身材特征）
+
+4. **面部表情**：自然微笑或平静表情，眼神看向镜头或略微偏向一侧
+
+**✅ 必须做到：**
+- 严格按照上述手部、身体、腿部的具体描述生成姿势
+- 姿势要自然、优雅、符合整体风格
+- 整体姿态要协调统一，不能生硬
+
+**❌ 绝对禁止：**
+- 不要保持与第二张图完全相同的姿势（必须有变化）
+- 不要改变模特的任何身材特征（身高、胖瘦、腿长、腿粗细、胸围、腰围等）
+- 不要改变服装的款式、尺寸、颜色、细节
+- 不要改变背景环境
+
+**🎯 目标：生成一张模特穿着第一张图服装的照片，姿势按照上述具体要求改变，但身材、服装、背景与预期完全一致。**`;
             }
 
             // 关键：传递两张图片的URL数组
