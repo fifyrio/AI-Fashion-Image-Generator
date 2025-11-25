@@ -151,6 +151,7 @@ export default function Home() {
   const [outfitV2IsDragging, setOutfitV2IsDragging] = useState(false);
   const [outfitV2RecommendMatch, setOutfitV2RecommendMatch] = useState(false);
   const [outfitV2ExtractTopOnly, setOutfitV2ExtractTopOnly] = useState(false);
+  const [outfitV2AdjustPose, setOutfitV2AdjustPose] = useState(false);
 
   // 当前阶段
   type OutfitV2Stage = 'upload' | 'extracting' | 'extracted' | 'generating' | 'completed';
@@ -1395,6 +1396,7 @@ export default function Home() {
             body: JSON.stringify({
               clothingImageUrl: data.url,
               character: outfitV2SelectedCharacters[0], // 使用第一个选中的模特
+              adjustPose: outfitV2AdjustPose, // 模特动作微调
             }),
           });
 
@@ -3259,6 +3261,31 @@ export default function Home() {
                     <h2 className="text-2xl font-semibold text-gray-700">
                       步骤 3：批量生成换装图片
                     </h2>
+
+                    {/* Adjust Pose Option */}
+                    <div className="bg-gradient-to-r from-pink-50 to-rose-50 rounded-lg p-4 border border-pink-200">
+                      <label className="flex items-center cursor-pointer group">
+                        <div className="relative">
+                          <input
+                            type="checkbox"
+                            checked={outfitV2AdjustPose}
+                            onChange={(e) => setOutfitV2AdjustPose(e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-pink-500 peer-focus:ring-4 peer-focus:ring-pink-300 transition-all"></div>
+                          <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                        </div>
+                        <div className="ml-3 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">💃</span>
+                            <span className="font-semibold text-gray-800">模特动作微调</span>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-1">
+                            开启后,图片里的模特的动作会根据之前的状态发生微调,避免生成的图片的动作完全一致
+                          </p>
+                        </div>
+                      </label>
+                    </div>
 
                     {outfitV2SelectedCharacters.length > 0 ? (
                       <button

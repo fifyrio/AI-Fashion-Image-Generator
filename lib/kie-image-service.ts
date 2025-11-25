@@ -481,12 +481,14 @@ export class KIEImageService {
      * @param clothingImageUrl 提取的服装图片URL
      * @param modelImageUrl 模特图片URL
      * @param character 模特角色
+     * @param adjustPose 是否微调模特动作
      * @returns 包含 taskId 的生成结果
      */
     async outfitChangeV2(
         clothingImageUrl: string,
         modelImageUrl: string,
-        character: string
+        character: string,
+        adjustPose: boolean = false
     ): Promise<ImageGenerationResult & { taskId?: string }> {
         const startTime = new Date();
 
@@ -495,9 +497,13 @@ export class KIEImageService {
             console.log(`👔 Clothing URL: ${clothingImageUrl}`);
             console.log(`🧍 Model URL: ${modelImageUrl}`);
             console.log(`🎭 Character: ${character}`);
+            console.log(`💃 Adjust Pose: ${adjustPose}`);
 
-            // 使用换装V2的 prompt
-            const prompt = OUTFIT_CHANGE_V2_PROMPT;
+            // 使用换装V2的 prompt,如果开启动作微调则添加相关提示
+            let prompt = OUTFIT_CHANGE_V2_PROMPT;
+            if (adjustPose) {
+                prompt = prompt + `\n\n⚠️ **动作微调要求**：\n- 在保持上述所有要求的前提下，对模特的动作、姿势进行轻微的调整和变化\n- 可以微调手部动作、站姿角度、身体倾斜度、表情等\n- 确保每次生成的图片中模特的动作都有细微差异，避免完全一致\n- 但身材特征（身高、胖瘦、腿长、腿粗细等）绝对不能改变\n- 动作变化应该自然、优雅，符合整体风格`;
+            }
 
             // 关键：传递两张图片的URL数组
             // 第一张：服装图片（what to wear）
