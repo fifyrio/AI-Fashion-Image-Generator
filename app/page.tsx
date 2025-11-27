@@ -152,6 +152,7 @@ export default function Home() {
   const [outfitV2RecommendMatch, setOutfitV2RecommendMatch] = useState(false);
   const [outfitV2ExtractTopOnly, setOutfitV2ExtractTopOnly] = useState(false);
   const [outfitV2AdjustPose, setOutfitV2AdjustPose] = useState(false);
+  const [outfitV2UseProModel, setOutfitV2UseProModel] = useState(false);
 
   // 当前阶段
   type OutfitV2Stage = 'upload' | 'extracting' | 'extracted' | 'generating' | 'completed';
@@ -1397,6 +1398,7 @@ export default function Home() {
               clothingImageUrl: data.url,
               character: outfitV2SelectedCharacters[0], // 使用第一个选中的模特
               adjustPose: outfitV2AdjustPose, // 模特动作微调
+              useProModel: outfitV2UseProModel,
             }),
           });
 
@@ -1433,7 +1435,8 @@ export default function Home() {
       // 第二步：并行轮询所有成功创建的任务
       const pollPromises = successfulTasks.map(async ({ index, taskId }) => {
         try {
-          const generatedUrl = await pollTaskStatus(taskId, 60);
+          const maxAttempts = outfitV2UseProModel ? 180 : 60; // PRO 模型最长等待约6分钟
+          const generatedUrl = await pollTaskStatus(taskId, maxAttempts);
 
           // 更新成功状态
           setOutfitV2GeneratedImages(prev => ({
@@ -3282,6 +3285,31 @@ export default function Home() {
                           </div>
                           <p className="text-sm text-gray-600 mt-1">
                             开启后,图片里的模特的动作会根据之前的状态发生微调,避免生成的图片的动作完全一致
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* Pro Model Option */}
+                    <div className="bg-gradient-to-r from-purple-50 to-fuchsia-50 rounded-lg p-4 border border-purple-200">
+                      <label className="flex items-center cursor-pointer group">
+                        <div className="relative">
+                          <input
+                            type="checkbox"
+                            checked={outfitV2UseProModel}
+                            onChange={(e) => setOutfitV2UseProModel(e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-purple-600 peer-focus:ring-4 peer-focus:ring-purple-300 transition-all"></div>
+                          <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                        </div>
+                        <div className="ml-3 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">🚀</span>
+                            <span className="font-semibold text-gray-800">PRO 模型</span>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-1">
+                            开启后使用 KIE 的 nano-banana-pro 模型生成，画面更精细但速度略慢
                           </p>
                         </div>
                       </label>

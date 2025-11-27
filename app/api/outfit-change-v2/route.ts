@@ -13,10 +13,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { clothingImageUrl, character, adjustPose } = body as {
+  const { clothingImageUrl, character, adjustPose, useProModel } = body as {
     clothingImageUrl?: string;
     character?: Character;
     adjustPose?: boolean;
+    useProModel?: boolean;
   };
 
   if (!clothingImageUrl || typeof clothingImageUrl !== 'string') {
@@ -39,6 +40,7 @@ export async function POST(request: NextRequest) {
   console.log(`  Clothing URL: ${clothingImageUrl}`);
   console.log(`  Character: ${character}`);
   console.log(`  Adjust Pose: ${adjustPose || false}`);
+  console.log(`  Use Pro Model: ${useProModel || false}`);
 
   try {
     // 获取模特图片URL
@@ -50,7 +52,8 @@ export async function POST(request: NextRequest) {
       clothingImageUrl,
       modelImageUrl,
       character,
-      adjustPose || false
+      adjustPose || false,
+      useProModel || false
     );
 
     if (!result.success) {

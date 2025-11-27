@@ -81,7 +81,12 @@ export class KIEImageService {
      * @param imageUrls 参考图片URL（单个或多个）
      * @returns 任务ID
      */
-    async createTask(prompt: string, imageUrls: string | string[], imageRatio: '9:16' | '1:1' = '9:16'): Promise<string> {
+    async createTask(
+        prompt: string,
+        imageUrls: string | string[],
+        imageRatio: '9:16' | '1:1' = '9:16',
+        model: string = 'google/nano-banana-edit'
+    ): Promise<string> {
         // 统一转换为数组
         const urls = Array.isArray(imageUrls) ? imageUrls : [imageUrls];
 
@@ -90,6 +95,7 @@ export class KIEImageService {
             console.log(`📍 API URL: ${this.baseUrl}/createTask`);
             console.log(`📝 Prompt length: ${prompt.length} chars`);
             console.log(`🖼️  Image URLs: ${urls.length} image(s)`);
+            console.log(`🤖 Model: ${model}`);
             console.log(`🔑 Token configured: ${this.apiToken ? 'Yes' : 'No'}`);
             console.log(`🔗 Callback URL: ${this.callbackUrl || 'Not configured'}`);
 
@@ -100,7 +106,7 @@ export class KIEImageService {
                     'Authorization': `Bearer ${this.apiToken}`
                 },
                 body: JSON.stringify({
-                    model: 'google/nano-banana-edit',
+                    model,
                     callBackUrl: this.callbackUrl,
                     input: {
                         prompt: prompt,
@@ -138,6 +144,75 @@ export class KIEImageService {
                 // 检查是否是网络连接问题
                 if (error.message === 'fetch failed' || error.name === 'FetchError') {
                     throw new Error(`Network connection failed. Please check: 1) Internet connectivity, 2) KIE API URL (${this.baseUrl}), 3) Firewall/proxy settings. Original error: ${error.message}`);
+                }
+            }
+            throw error;
+        }
+    }
+
+    /**
+     * 针对 nano-banana-pro 的专用创建任务方法
+     * 该模型要求不同的参数结构
+     */
+    async createProTask(
+        prompt: string,
+        imageInputs: string | string[],
+        aspectRatio: '9:16' | '1:1' = '9:16',
+        resolution: '1K' | '2K' = '2K'
+    ): Promise<string> {
+        const urls = Array.isArray(imageInputs) ? imageInputs : [imageInputs];
+
+        try {
+            console.log(`🔄 Creating KIE PRO task...`);
+            console.log(`📍 API URL: ${this.baseUrl}/createTask`);
+            console.log(`📝 Prompt length: ${prompt.length} chars`);
+            console.log(`🖼️  Image inputs: ${urls.length} image(s)`);
+            console.log(`🎞️  Aspect Ratio: ${aspectRatio}`);
+            console.log(`🖥️  Resolution: ${resolution}`);
+            console.log(`🔑 Token configured: ${this.apiToken ? 'Yes' : 'No'}`);
+            console.log(`🔗 Callback URL: ${this.callbackUrl || 'Not configured'}`);
+
+            const response = await fetch(`${this.baseUrl}/createTask`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.apiToken}`
+                },
+                body: JSON.stringify({
+                    model: 'nano-banana-pro',
+                    callBackUrl: this.callbackUrl,
+                    input: {
+                        prompt,
+                        image_input: urls,
+                        aspect_ratio: aspectRatio,
+                        resolution,
+                        output_format: 'png'
+                    }
+                })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`❌ KIE PRO API HTTP error: ${response.status} ${response.statusText}`);
+                console.error(`❌ Response body: ${errorText}`);
+                throw new Error(`KIE PRO API request failed: ${response.status} ${errorText}`);
+            }
+
+            const result: KIECreateTaskResponse = await response.json();
+
+            if (result.code !== 200) {
+                console.error(`❌ KIE PRO API error code: ${result.code}`);
+                console.error(`❌ KIE PRO API error message: ${result.message}`);
+                throw new Error(`KIE PRO API error: ${result.message}`);
+            }
+
+            console.log(`✅ KIE PRO task created: ${result.data.taskId}`);
+            return result.data.taskId;
+        } catch (error) {
+            if (error instanceof Error) {
+                console.error(`❌ KIE PRO error: ${error.message}`);
+                if (error.stack) {
+                    console.error(error.stack);
                 }
             }
             throw error;
@@ -501,7 +576,8 @@ export class KIEImageService {
         clothingImageUrl: string,
         modelImageUrl: string,
         character: string,
-        adjustPose: boolean = false
+        adjustPose: boolean = false,
+        useProModel: boolean = false
     ): Promise<ImageGenerationResult & { taskId?: string }> {
         const startTime = new Date();
 
@@ -511,6 +587,7 @@ export class KIEImageService {
             console.log(`🧍 Model URL: ${modelImageUrl}`);
             console.log(`🎭 Character: ${character}`);
             console.log(`💃 Adjust Pose: ${adjustPose}`);
+            console.log(`🧠 Use Pro Model: ${useProModel}`);
 
             // 使用换装V2的 prompt,如果开启动作微调则添加相关提示
             let prompt = OUTFIT_CHANGE_V2_PROMPT;
@@ -595,11 +672,19 @@ export class KIEImageService {
             // 关键：传递两张图片的URL数组
             // 第一张：服装图片（what to wear）
             // 第二张：模特图片（who will wear）
-            const taskId = await this.createTask(
-                prompt,
-                [clothingImageUrl, modelImageUrl],
-                '9:16'
-            );
+            const taskId = useProModel
+                ? await this.createProTask(
+                    prompt,
+                    [clothingImageUrl, modelImageUrl],
+                    '9:16',
+                    '2K'
+                )
+                : await this.createTask(
+                    prompt,
+                    [clothingImageUrl, modelImageUrl],
+                    '9:16',
+                    'google/nano-banana-edit'
+                );
 
             console.log(`✅ KIE task created: ${taskId}`);
 
