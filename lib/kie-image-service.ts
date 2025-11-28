@@ -1,6 +1,6 @@
 import { ImageGenerationResult } from './types';
 import { saveKIETaskMetadata } from './r2';
-import { IMAGE_GENERATION_BASE64_PROMPT, IMAGE_GENERATION_BASE64_TOP_ONLY_PROMPT, EXTRACT_CLOTHING_PROMPT, EXTRACT_CLOTHING_TOP_ONLY_PROMPT, EXTRACT_CLOTHING_WITH_MATCH_PROMPT, OUTFIT_CHANGE_V2_PROMPT } from './prompts';
+import { IMAGE_GENERATION_BASE64_PROMPT, IMAGE_GENERATION_BASE64_TOP_ONLY_PROMPT, EXTRACT_CLOTHING_PROMPT, EXTRACT_CLOTHING_UNZIP_PROMPT, EXTRACT_CLOTHING_TOP_ONLY_PROMPT, EXTRACT_CLOTHING_WITH_MATCH_PROMPT, OUTFIT_CHANGE_V2_PROMPT } from './prompts';
 
 // KIE API 响应类型
 interface KIECreateTaskResponse {
@@ -364,6 +364,7 @@ export class KIEImageService {
      * @param imageUrl 原始图片URL
      * @param holdingPhone 是否一只手举着手机
      * @param wearingMask 是否带着白色口罩
+     * @param useProModel 是否使用PRO模型
      * @returns 包含 taskId 的生成结果
      */
     async generateModelPose(
@@ -371,7 +372,8 @@ export class KIEImageService {
         description: string,
         imageUrl: string,
         holdingPhone: boolean = false,
-        wearingMask: boolean = false
+        wearingMask: boolean = false,
+        useProModel: boolean = false
     ): Promise<ImageGenerationResult & { taskId?: string }> {
         const startTime = new Date();
 
@@ -381,6 +383,7 @@ export class KIEImageService {
             console.log(`📝 Description: ${description}`);
             console.log(`📱 Holding Phone: ${holdingPhone}`);
             console.log(`😷 Wearing Mask: ${wearingMask}`);
+            console.log(`🚀 Use Pro Model: ${useProModel}`);
             console.log(`🖼️  Image URL: ${imageUrl}`);
 
             // 构建提示词
@@ -449,8 +452,10 @@ export class KIEImageService {
 2. 在展现腿部动作自然优雅的同时，必须完全保持原图中腿部的长度、粗细和形状不变
 3. 所有身材特征（臀部、腿部、腰部等）都必须与原图100%一致，只改变姿势角度`;
 
-            // 创建任务
-            const taskId = await this.createTask(prompt, imageUrl);
+            // 创建任务（根据useProModel选择不同的方法）
+            const taskId = useProModel
+                ? await this.createProTask(prompt, imageUrl, '9:16', '2K')
+                : await this.createTask(prompt, imageUrl);
             console.log(`✅ KIE task created: ${taskId}`);
 
             // 保存任务元数据到 R2
@@ -493,12 +498,14 @@ export class KIEImageService {
      * @param imageUrl 原始图片URL
      * @param recommendMatch 是否推荐搭配的裤子或上衣
      * @param extractTopOnly 是否只提取上装
+     * @param unzipJacket 是否强制外套敞开（不拉拉链、不扣纽扣）
      * @returns 包含 taskId 的生成结果
      */
     async extractClothing(
         imageUrl: string,
         recommendMatch: boolean = false,
-        extractTopOnly: boolean = false
+        extractTopOnly: boolean = false,
+        unzipJacket: boolean = false
     ): Promise<ImageGenerationResult & { taskId?: string }> {
         const startTime = new Date();
 
@@ -507,8 +514,9 @@ export class KIEImageService {
             console.log(`🖼️  Image URL: ${imageUrl}`);
             console.log(`🎯 Recommend Match: ${recommendMatch}`);
             console.log(`👕 Extract Top Only: ${extractTopOnly}`);
+            console.log(`🧥 Unzip Jacket: ${unzipJacket}`);
 
-            // 根据 extractTopOnly 和 recommendMatch 选择不同的 prompt
+            // 根据 extractTopOnly、recommendMatch 和 unzipJacket 选择不同的 prompt
             let prompt: string;
             let promptType: string;
 
@@ -518,6 +526,9 @@ export class KIEImageService {
             } else if (recommendMatch) {
                 prompt = EXTRACT_CLOTHING_WITH_MATCH_PROMPT;
                 promptType = 'WITH_MATCH';
+            } else if (unzipJacket) {
+                prompt = EXTRACT_CLOTHING_UNZIP_PROMPT;
+                promptType = 'UNZIP';
             } else {
                 prompt = EXTRACT_CLOTHING_PROMPT;
                 promptType = 'STANDARD';

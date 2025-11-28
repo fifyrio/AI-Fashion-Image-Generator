@@ -110,6 +110,7 @@ export default function Home() {
   const [modelPoseGeneratedImages, setModelPoseGeneratedImages] = useState<Array<{poseIndex: number, pose: string, imageUrl: string, status: 'generating' | 'completed' | 'failed', error?: string}>>([]);
   const [modelHoldingPhone, setModelHoldingPhone] = useState(false);
   const [modelWearingMask, setModelWearingMask] = useState(false);
+  const [modelPoseUseProModel, setModelPoseUseProModel] = useState(false);
 
   // Outfit-Change-V2 tab states - 批量处理
   const [outfitV2OriginalFiles, setOutfitV2OriginalFiles] = useState<File[]>([]);
@@ -151,6 +152,7 @@ export default function Home() {
   const [outfitV2IsDragging, setOutfitV2IsDragging] = useState(false);
   const [outfitV2RecommendMatch, setOutfitV2RecommendMatch] = useState(false);
   const [outfitV2ExtractTopOnly, setOutfitV2ExtractTopOnly] = useState(false);
+  const [outfitV2UnzipJacket, setOutfitV2UnzipJacket] = useState(false);
   const [outfitV2AdjustPose, setOutfitV2AdjustPose] = useState(false);
   const [outfitV2UseProModel, setOutfitV2UseProModel] = useState(false);
 
@@ -987,6 +989,7 @@ export default function Home() {
               description: modelPoseAnalysis.description,
               holdingPhone: modelHoldingPhone,
               wearingMask: modelWearingMask,
+              useProModel: modelPoseUseProModel,
             }),
           });
 
@@ -998,8 +1001,8 @@ export default function Home() {
           const { taskId } = await createResponse.json();
           console.log(`Task created for pose ${poseIndex}:`, taskId);
 
-          // 轮询任务状态
-          const maxAttempts = 60;
+          // 轮询任务状态（PRO 模型需要更长时间）
+          const maxAttempts = modelPoseUseProModel ? 180 : 60; // PRO 模型最长等待约6分钟
           const pollInterval = 2000;
 
           for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -1205,7 +1208,8 @@ export default function Home() {
           body: JSON.stringify({
             imageUrl: url,
             recommendMatch: outfitV2RecommendMatch,
-            extractTopOnly: outfitV2ExtractTopOnly
+            extractTopOnly: outfitV2ExtractTopOnly,
+            unzipJacket: outfitV2UnzipJacket
           }),
         });
 
@@ -2600,6 +2604,32 @@ export default function Home() {
                       </label>
                     </div>
 
+                    {/* PRO Model Option */}
+                    <div className="bg-gradient-to-r from-orange-50 to-red-50 rounded-lg p-4 border border-orange-200">
+                      <label className="flex items-center cursor-pointer group">
+                        <div className="relative">
+                          <input
+                            type="checkbox"
+                            checked={modelPoseUseProModel}
+                            onChange={(e) => setModelPoseUseProModel(e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-orange-500 peer-focus:ring-4 peer-focus:ring-orange-300 transition-all"></div>
+                          <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                        </div>
+                        <div className="ml-3 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">🚀</span>
+                            <span className="font-semibold text-gray-800">使用 PRO 模型</span>
+                            <span className="px-2 py-0.5 bg-orange-500 text-white text-xs font-bold rounded-full">PRO</span>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-1">
+                            开启后，使用 nano-banana-pro 高级模型生成，质量更高但速度较慢（约2-6分钟）
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+
                     {/* Analyze Button */}
                     <button
                       onClick={handleModelPoseAnalyze}
@@ -2972,6 +3002,31 @@ export default function Home() {
                             </div>
                             <p className="text-sm text-gray-600 mt-1">
                               开启后，AI 会根据提取的服装智能推荐搭配的裤子或上衣
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+
+                      {/* Unzip Jacket Option */}
+                      <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-4 border border-green-200">
+                        <label className="flex items-center cursor-pointer group">
+                          <div className="relative">
+                            <input
+                              type="checkbox"
+                              checked={outfitV2UnzipJacket}
+                              onChange={(e) => setOutfitV2UnzipJacket(e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-green-500 peer-focus:ring-4 peer-focus:ring-green-300 transition-all"></div>
+                            <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                          </div>
+                          <div className="ml-3 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">🧥</span>
+                              <span className="font-semibold text-gray-800">外套敞开不拉拉链</span>
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1">
+                              开启后，提取生成的服装图片中外套会是敞开状态，不会扣上或拉上拉链
                             </p>
                           </div>
                         </label>

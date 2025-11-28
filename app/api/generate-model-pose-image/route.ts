@@ -5,7 +5,7 @@ export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
-    const { originalImageUrl, pose, description, holdingPhone, wearingMask } = await request.json();
+    const { originalImageUrl, pose, description, holdingPhone, wearingMask, useProModel } = await request.json();
 
     if (!originalImageUrl || !pose) {
       return NextResponse.json(
@@ -18,7 +18,8 @@ export async function POST(request: NextRequest) {
       posePreview: pose.substring(0, 100),
       descriptionPreview: description?.substring(0, 100),
       holdingPhone: holdingPhone || false,
-      wearingMask: wearingMask || false
+      wearingMask: wearingMask || false,
+      useProModel: useProModel || false
     });
 
     // 使用 KIE 服务创建异步任务
@@ -28,7 +29,8 @@ export async function POST(request: NextRequest) {
       description || '',
       originalImageUrl,
       holdingPhone || false,
-      wearingMask || false
+      wearingMask || false,
+      useProModel || false
     );
 
     if (!result.success || !result.taskId) {
