@@ -2016,19 +2016,6 @@ export default function Home() {
               </div>
             </button>
             <button
-              onClick={() => setActiveTab('scene-pose')}
-              className={`flex-1 px-6 py-4 text-lg font-semibold transition-all ${
-                activeTab === 'scene-pose'
-                  ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
-                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
-              }`}
-            >
-              <div className="flex items-center justify-center gap-2">
-                <span className="text-xl">🎭</span>
-                <span>更换场景+姿势</span>
-              </div>
-            </button>
-            <button
               onClick={() => setActiveTab('mimic-reference')}
               className={`flex-1 px-6 py-4 text-lg font-semibold transition-all ${
                 activeTab === 'mimic-reference'
