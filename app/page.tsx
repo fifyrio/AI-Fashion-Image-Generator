@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import type { UploadedReference } from '@/lib/types';
 import type { GeneratedImageSummary } from '@/lib/pipeline';
 
@@ -52,7 +52,27 @@ type GeneratedImage = {
   character: string;
 };
 
-type TabType = 'outfit-change' | 'scene-pose' | 'model-pose' | 'outfit-change-v2' | 'mimic-reference' | 'copywriting';
+type ModelGender = 'female' | 'male';
+
+const MODEL_GENERATION_PROMPTS: Record<ModelGender, string> = {
+  female: '25 岁东亚女生，淡妆，微笑，白色背景，竖构图，全身模特照，高清，手机自拍挡住脸，佩戴白色口罩，适合时尚穿搭展示。',
+  male: '28 岁东亚男生，干净短发，微笑，白色背景，竖构图，全身模特照，高清，手机自拍挡住脸，佩戴白色口罩，适合时尚穿搭展示。'
+};
+
+const MODEL_STYLE_MAP = {
+  female: ['甜酷风', 'OL风', '韩风', '人鱼风', '微胖风'],
+  male: ['商务绅士', '街头潮酷', '运动风', '复古绅士', '韩系男友']
+} as const;
+
+type ModelStyle = (typeof MODEL_STYLE_MAP)[ModelGender][number];
+
+const IMAGE_ENHANCE_MODELS = ['Low Resolution V2', 'Standard V1'] as const;
+const IMAGE_ENHANCE_UPSCALE_OPTIONS = ['2x', '4x', '6x'] as const;
+
+type ImageEnhanceModel = (typeof IMAGE_ENHANCE_MODELS)[number];
+type ImageEnhanceUpscale = (typeof IMAGE_ENHANCE_UPSCALE_OPTIONS)[number];
+
+type TabType = 'outfit-change' | 'scene-pose' | 'model-pose' | 'model-generation' | 'image-enhance' | 'outfit-change-v2' | 'mimic-reference' | 'copywriting';
 
 interface ScenePoseSuggestion {
   scene: string;
@@ -60,7 +80,7 @@ interface ScenePoseSuggestion {
 }
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<TabType>('outfit-change');
+  const [activeTab, setActiveTab] = useState<TabType>('model-generation');
   const [filesWithStatus, setFilesWithStatus] = useState<FileWithStatus[]>([]);
   const [characterOptions, setCharacterOptions] = useState<CharacterOption[]>(DEFAULT_CHARACTER_OPTIONS);
   const [character, setCharacter] = useState<string>(DEFAULT_CHARACTER_ID);
@@ -184,6 +204,28 @@ export default function Home() {
     copywriting: string[];
   }> | null>(null);
   const [copywritingError, setCopywritingError] = useState<string>('');
+
+  // Model generation tab states
+  const [modelGenerationGender, setModelGenerationGender] = useState<ModelGender>('female');
+  const [modelGenerationPrompt, setModelGenerationPrompt] = useState(MODEL_GENERATION_PROMPTS.female);
+  const [modelGenerationStyle, setModelGenerationStyle] = useState<ModelStyle>(MODEL_STYLE_MAP.female[0]);
+  const [modelGenerationGenerating, setModelGenerationGenerating] = useState(false);
+  const [modelGenerationStatus, setModelGenerationStatus] = useState('');
+  const [modelGenerationTaskId, setModelGenerationTaskId] = useState<string | null>(null);
+  const [modelGenerationImageUrl, setModelGenerationImageUrl] = useState<string | null>(null);
+  const [imageEnhanceUrl, setImageEnhanceUrl] = useState('');
+  const [imageEnhancePreview, setImageEnhancePreview] = useState('');
+  const [imageEnhanceModel, setImageEnhanceModel] = useState<ImageEnhanceModel>(IMAGE_ENHANCE_MODELS[0]);
+  const [imageEnhanceUpscale, setImageEnhanceUpscale] = useState<ImageEnhanceUpscale>('6x');
+  const [imageEnhanceFaceEnhancement, setImageEnhanceFaceEnhancement] = useState(true);
+  const [imageEnhanceFaceStrength, setImageEnhanceFaceStrength] = useState(0.8);
+  const [imageEnhanceFaceCreativity, setImageEnhanceFaceCreativity] = useState(0.5);
+  const [imageEnhanceGenerating, setImageEnhanceGenerating] = useState(false);
+  const [imageEnhanceUploading, setImageEnhanceUploading] = useState(false);
+  const [imageEnhanceError, setImageEnhanceError] = useState('');
+  const [imageEnhanceStatus, setImageEnhanceStatus] = useState('');
+  const [imageEnhanceResultUrl, setImageEnhanceResultUrl] = useState<string | null>(null);
+  const imageEnhanceFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const clearMockProgressTimers = () => {
     if (progressIntervalRef.current) {
@@ -1741,6 +1783,167 @@ export default function Home() {
     }
   };
 
+  const handleModelGenerationGenderChange = (gender: ModelGender) => {
+    if (gender === modelGenerationGender) {
+      return;
+    }
+    setModelGenerationGender(gender);
+    setModelGenerationPrompt(MODEL_GENERATION_PROMPTS[gender]);
+    setModelGenerationStyle(MODEL_STYLE_MAP[gender][0]);
+  };
+
+  const handleModelGeneration = async () => {
+    const trimmedPrompt = modelGenerationPrompt.trim();
+
+    if (!trimmedPrompt) {
+      setModelGenerationStatus('请输入模特描述');
+      return;
+    }
+
+    setModelGenerationGenerating(true);
+    setModelGenerationImageUrl(null);
+    setModelGenerationTaskId(null);
+    setModelGenerationStatus(`正在提交 ${modelGenerationStyle} 风格模特生成任务，请稍候...`);
+
+    try {
+      const response = await fetch('/api/generate-model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: trimmedPrompt,
+          style: modelGenerationStyle,
+          gender: modelGenerationGender,
+          aspectRatio: '9:16'
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw new Error(error?.error || '生成失败');
+      }
+
+      const data = await response.json();
+      if (!data.taskId) {
+        throw new Error('任务创建失败，请稍后重试');
+      }
+
+      setModelGenerationTaskId(data.taskId);
+      setModelGenerationStatus(`任务已创建（ID: ${data.taskId}），正在生成模特图片...`);
+
+      const maxAttempts = 60;
+      const imageUrl = await pollTaskStatus(data.taskId, maxAttempts);
+      setModelGenerationImageUrl(imageUrl);
+      setModelGenerationStatus('模特生成完成，可下载或保存图片。');
+    } catch (error) {
+      console.error('模特生成失败:', error);
+      setModelGenerationStatus(error instanceof Error ? error.message : '生成失败，请稍后重试');
+    } finally {
+      setModelGenerationGenerating(false);
+    }
+  };
+
+  const handleImageEnhanceUploadClick = () => {
+    imageEnhanceFileInputRef.current?.click();
+  };
+
+  const handleImageEnhanceFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setImageEnhanceUploading(true);
+    setImageEnhanceError('');
+    setImageEnhanceStatus('');
+    setImageEnhanceResultUrl(null);
+
+    try {
+      const previewReader = new FileReader();
+      previewReader.onloadend = () => {
+        setImageEnhancePreview(previewReader.result as string);
+      };
+      previewReader.readAsDataURL(file);
+
+      const formData = new FormData();
+      formData.append('files', file);
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw new Error(error?.error || '上传失败');
+      }
+
+      const data = await response.json();
+      const uploaded = data.uploaded?.[0];
+      if (!uploaded?.url) {
+        throw new Error('上传失败，请稍后重试');
+      }
+
+      setImageEnhanceUrl(uploaded.url);
+      setImageEnhanceStatus('图片上传成功，可开始画质增强。');
+    } catch (error) {
+      console.error('图片上传失败:', error);
+      setImageEnhanceError(error instanceof Error ? error.message : '上传失败，请稍后重试');
+    } finally {
+      setImageEnhanceUploading(false);
+      if (event.target) {
+        event.target.value = '';
+      }
+    }
+  };
+
+  const handleImageEnhanceGenerate = async () => {
+    if (!imageEnhanceUrl) {
+      setImageEnhanceError('请先上传或输入图片地址');
+      return;
+    }
+
+    setImageEnhanceGenerating(true);
+    setImageEnhanceError('');
+    setImageEnhanceResultUrl(null);
+    setImageEnhanceStatus('正在增强图像，请稍候...');
+
+    try {
+      const response = await fetch('/api/enhance-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageUrl: imageEnhanceUrl,
+          enhanceModel: imageEnhanceModel,
+          outputFormat: 'jpg',
+          upscaleFactor: imageEnhanceUpscale,
+          faceEnhancement: imageEnhanceFaceEnhancement,
+          subjectDetection: 'Foreground',
+          faceEnhancementStrength: imageEnhanceFaceStrength,
+          faceEnhancementCreativity: imageEnhanceFaceCreativity
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw new Error(error?.error || '增强失败');
+      }
+
+      const data = await response.json();
+      if (!data.url) {
+        throw new Error('未获取到增强后的图片');
+      }
+
+      setImageEnhanceResultUrl(data.url);
+      setImageEnhanceStatus('增强完成，可下载或查看结果。');
+    } catch (error) {
+      console.error('图像增强失败:', error);
+      setImageEnhanceError(error instanceof Error ? error.message : '增强失败，请稍后重试');
+      setImageEnhanceStatus('');
+    } finally {
+      setImageEnhanceGenerating(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-8">
       <div className="max-w-6xl mx-auto">
@@ -1761,29 +1964,29 @@ export default function Home() {
         <div className="bg-white rounded-t-lg shadow-lg">
           <div className="flex border-b border-gray-200">
             <button
-              onClick={() => setActiveTab('outfit-change')}
+              onClick={() => setActiveTab('model-generation')}
               className={`flex-1 px-6 py-4 text-lg font-semibold transition-all ${
-                activeTab === 'outfit-change'
+                activeTab === 'model-generation'
                   ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
                   : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
               }`}
             >
               <div className="flex items-center justify-center gap-2">
-                <span className="text-xl">👗</span>
-                <span>模特换装</span>
+                <span className="text-xl">🧍</span>
+                <span>模特生成</span>
               </div>
             </button>
             <button
-              onClick={() => setActiveTab('scene-pose')}
+              onClick={() => setActiveTab('outfit-change-v2')}
               className={`flex-1 px-6 py-4 text-lg font-semibold transition-all ${
-                activeTab === 'scene-pose'
+                activeTab === 'outfit-change-v2'
                   ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
                   : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
               }`}
             >
               <div className="flex items-center justify-center gap-2">
-                <span className="text-xl">🎭</span>
-                <span>更换场景+姿势</span>
+                <span className="text-xl">✨</span>
+                <span>模特换装V2</span>
               </div>
             </button>
             <button
@@ -1800,16 +2003,29 @@ export default function Home() {
               </div>
             </button>
             <button
-              onClick={() => setActiveTab('outfit-change-v2')}
+              onClick={() => setActiveTab('image-enhance')}
               className={`flex-1 px-6 py-4 text-lg font-semibold transition-all ${
-                activeTab === 'outfit-change-v2'
+                activeTab === 'image-enhance'
                   ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
                   : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
               }`}
             >
               <div className="flex items-center justify-center gap-2">
-                <span className="text-xl">✨</span>
-                <span>模特换装V2</span>
+                <span className="text-xl">🪄</span>
+                <span>图像画质增强</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('scene-pose')}
+              className={`flex-1 px-6 py-4 text-lg font-semibold transition-all ${
+                activeTab === 'scene-pose'
+                  ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-xl">🎭</span>
+                <span>更换场景+姿势</span>
               </div>
             </button>
             <button
@@ -2877,6 +3093,371 @@ export default function Home() {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {activeTab === 'model-generation' && (
+            <div className="space-y-8">
+              <div className="space-y-3">
+                <h3 className="text-xl font-semibold text-gray-700">模特性别</h3>
+                <div className="flex gap-3">
+                  {([
+                    { id: 'female', label: '女' },
+                    { id: 'male', label: '男' }
+                  ] as Array<{ id: ModelGender; label: string }>).map((option) => {
+                    const isActive = option.id === modelGenerationGender;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className={`flex-1 px-4 py-2 rounded-xl border font-semibold transition ${
+                          isActive
+                            ? 'bg-purple-600 text-white border-purple-600 shadow'
+                            : 'border-gray-300 text-gray-700 hover:border-purple-400'
+                        }`}
+                        onClick={() => handleModelGenerationGenderChange(option.id)}
+                      >
+                        {option.label}模特
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <h2 className="text-2xl font-semibold text-gray-700">模特描述</h2>
+                  <p className="text-gray-500 text-sm">
+                    描述模特的年龄、妆容、姿态与背景，示例已为你填入，可按需微调。
+                  </p>
+                </div>
+                <textarea
+                  value={modelGenerationPrompt}
+                  onChange={(event) => setModelGenerationPrompt(event.target.value)}
+                  rows={3}
+                  className="w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-4 py-3 text-gray-800 focus:border-purple-500 focus:bg-white focus:outline-none transition"
+                  placeholder={MODEL_GENERATION_PROMPTS[modelGenerationGender]}
+                />
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="text-xl font-semibold text-gray-700">模特风格</h3>
+                <div className="flex flex-wrap gap-3">
+                  {MODEL_STYLE_MAP[modelGenerationGender].map((style) => {
+                    const isActive = style === modelGenerationStyle;
+                    return (
+                      <button
+                        key={style}
+                        type="button"
+                        className={`px-4 py-2 rounded-full border transition ${
+                          isActive
+                            ? 'bg-purple-600 text-white border-purple-600 shadow'
+                            : 'border-gray-300 text-gray-700 hover:border-purple-400'
+                        }`}
+                        onClick={() => setModelGenerationStyle(style)}
+                      >
+                        {style}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <button
+                  onClick={handleModelGeneration}
+                  disabled={modelGenerationGenerating}
+                  className={`inline-flex items-center justify-center gap-3 rounded-xl px-6 py-3 font-semibold text-white transition ${
+                    modelGenerationGenerating
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-purple-600 to-blue-500 hover:from-purple-500 hover:to-blue-400'
+                  }`}
+                >
+                  <span role="img" aria-hidden="true">
+                    🧬
+                  </span>
+                  {modelGenerationGenerating ? (
+                    <span className="flex items-center gap-2">
+                      <span className="inline-flex h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                      生成中...
+                    </span>
+                  ) : (
+                    '生成模特'
+                  )}
+                </button>
+              </div>
+
+              {modelGenerationGenerating && (
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 flex items-center gap-4">
+                  <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-500 border-t-transparent" />
+                  <div>
+                    <p className="text-blue-900 font-semibold">
+                      {modelGenerationStatus || '正在生成模特，请稍候...'}
+                    </p>
+                    {modelGenerationTaskId && (
+                      <p className="text-sm text-blue-700 mt-1">任务 ID：{modelGenerationTaskId}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {!modelGenerationGenerating && modelGenerationStatus && (
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-sm text-gray-700" aria-live="polite">
+                  <p>{modelGenerationStatus}</p>
+                  {modelGenerationTaskId && (
+                    <p className="text-xs text-gray-500 mt-1">任务 ID：{modelGenerationTaskId}</p>
+                  )}
+                </div>
+              )}
+
+              {modelGenerationImageUrl && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">✅</span>
+                    <h3 className="text-xl font-semibold text-gray-800">生成结果</h3>
+                  </div>
+                  <div className="relative w-full h-[500px] bg-gray-100 rounded-2xl overflow-hidden">
+                    <Image
+                      src={modelGenerationImageUrl}
+                      alt="生成模特结果"
+                      fill
+                      className="object-contain"
+                      unoptimized
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <a
+                      href={`/api/download?url=${encodeURIComponent(modelGenerationImageUrl)}&filename=model-generation.png`}
+                      className="inline-flex items-center gap-2 rounded-xl bg-purple-600 text-white px-5 py-2.5 font-semibold shadow hover:bg-purple-500 transition"
+                    >
+                      下载图片
+                    </a>
+                    <a
+                      href={modelGenerationImageUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-5 py-2.5 font-semibold text-gray-700 hover:border-purple-400 transition"
+                    >
+                      在新标签页打开
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'image-enhance' && (
+            <div className="space-y-8">
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                ref={imageEnhanceFileInputRef}
+                onChange={handleImageEnhanceFileChange}
+              />
+
+              <div className="space-y-3">
+                <h2 className="text-2xl font-semibold text-gray-700">1. 上传或输入图片</h2>
+                <p className="text-sm text-gray-500">
+                  支持上传本地图片或直接粘贴在线图片链接，系统会自动上传到 R2 后再进行画质增强。
+                </p>
+                <button
+                  type="button"
+                  onClick={handleImageEnhanceUploadClick}
+                  disabled={imageEnhanceUploading}
+                  className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-semibold text-white transition ${
+                    imageEnhanceUploading
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-blue-600 to-indigo-500 hover:from-blue-500 hover:to-indigo-400'
+                  }`}
+                >
+                  <span role="img" aria-hidden="true">📤</span>
+                  {imageEnhanceUploading ? '上传中...' : '上传图片'}
+                </button>
+                {imageEnhancePreview && (
+                  <div className="relative w-full h-72 bg-gray-100 rounded-2xl overflow-hidden border border-dashed border-purple-200">
+                    <Image
+                      src={imageEnhancePreview}
+                      alt="待增强的图片预览"
+                      fill
+                      className="object-contain"
+                      unoptimized
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-700">增强模型</h3>
+                    <div className="flex flex-wrap gap-3 mt-3">
+                      {IMAGE_ENHANCE_MODELS.map((model) => {
+                        const isActive = model === imageEnhanceModel;
+                        return (
+                          <button
+                            key={model}
+                            type="button"
+                            className={`px-4 py-2 rounded-full border transition ${
+                              isActive
+                                ? 'bg-purple-600 text-white border-purple-600 shadow'
+                                : 'border-gray-300 text-gray-700 hover:border-purple-400'
+                            }`}
+                            onClick={() => setImageEnhanceModel(model)}
+                          >
+                            {model}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-700">放大倍数</h3>
+                    <div className="flex gap-3 mt-3">
+                      {IMAGE_ENHANCE_UPSCALE_OPTIONS.map((option) => {
+                        const isActive = option === imageEnhanceUpscale;
+                        return (
+                          <button
+                            key={option}
+                            type="button"
+                            className={`px-4 py-2 rounded-lg border font-semibold transition ${
+                              isActive
+                                ? 'bg-blue-600 text-white border-blue-600 shadow'
+                                : 'border-gray-300 text-gray-700 hover:border-blue-400'
+                            }`}
+                            onClick={() => setImageEnhanceUpscale(option)}
+                          >
+                            {option}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-700">面部增强</h3>
+                      <p className="text-sm text-gray-500">自动检测面部并优化细节</p>
+                    </div>
+                    <label className="inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="sr-only peer"
+                        checked={imageEnhanceFaceEnhancement}
+                        onChange={(event) => setImageEnhanceFaceEnhancement(event.target.checked)}
+                      />
+                      <span className="w-12 h-6 bg-gray-300 rounded-full relative transition peer-checked:bg-purple-200">
+                        <span className="absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition peer-checked:translate-x-6 peer-checked:bg-purple-600" />
+                      </span>
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="flex justify-between text-sm text-gray-600 mb-2">
+                      <span>面部增强强度</span>
+                      <span>{imageEnhanceFaceStrength.toFixed(1)}</span>
+                    </label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.1}
+                      value={imageEnhanceFaceStrength}
+                      onChange={(event) => setImageEnhanceFaceStrength(parseFloat(event.target.value))}
+                      className="w-full accent-purple-600"
+                      disabled={!imageEnhanceFaceEnhancement}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="flex justify-between text-sm text-gray-600 mb-2">
+                      <span>面部细节创意</span>
+                      <span>{imageEnhanceFaceCreativity.toFixed(1)}</span>
+                    </label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.1}
+                      value={imageEnhanceFaceCreativity}
+                      onChange={(event) => setImageEnhanceFaceCreativity(parseFloat(event.target.value))}
+                      className="w-full accent-purple-600"
+                      disabled={!imageEnhanceFaceEnhancement}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <button
+                  onClick={handleImageEnhanceGenerate}
+                  disabled={imageEnhanceGenerating}
+                  className={`inline-flex items-center justify-center gap-3 rounded-xl px-6 py-3 font-semibold text-white transition ${
+                    imageEnhanceGenerating
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400'
+                  }`}
+                >
+                  <span role="img" aria-hidden="true">⚡</span>
+                  {imageEnhanceGenerating ? (
+                    <span className="flex items-center gap-2">
+                      <span className="inline-flex h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                      增强中...
+                    </span>
+                  ) : (
+                    '开始画质增强'
+                  )}
+                </button>
+
+                {imageEnhanceError && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-sm">
+                    {imageEnhanceError}
+                  </div>
+                )}
+
+                {imageEnhanceStatus && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-sm text-gray-700" aria-live="polite">
+                    {imageEnhanceStatus}
+                  </div>
+                )}
+              </div>
+
+              {imageEnhanceResultUrl && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">✅</span>
+                    <h3 className="text-xl font-semibold text-gray-800">增强结果</h3>
+                  </div>
+                  <div className="relative w-full h-[500px] bg-gray-100 rounded-2xl overflow-hidden">
+                    <Image
+                      src={imageEnhanceResultUrl}
+                      alt="增强后的图片"
+                      fill
+                      className="object-contain"
+                      unoptimized
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <a
+                      href={`/api/download?url=${encodeURIComponent(imageEnhanceResultUrl)}&filename=image-enhance.jpg`}
+                      className="inline-flex items-center gap-2 rounded-xl bg-purple-600 text-white px-5 py-2.5 font-semibold shadow hover:bg-purple-500 transition"
+                    >
+                      下载增强图片
+                    </a>
+                    <a
+                      href={imageEnhanceResultUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-5 py-2.5 font-semibold text-gray-700 hover:border-purple-400 transition"
+                    >
+                      在新标签页打开
+                    </a>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

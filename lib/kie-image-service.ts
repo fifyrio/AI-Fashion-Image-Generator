@@ -151,6 +151,69 @@ export class KIEImageService {
     }
 
     /**
+     * 创建仅基于文本提示词的 KIE 任务
+     * @param prompt 生成提示词
+     * @param imageRatio 图片长宽比
+     * @param model 使用的模型
+     */
+    async createPromptOnlyTask(
+        prompt: string,
+        imageRatio: '9:16' | '1:1' = '9:16',
+        model: string = 'google/nano-banana'
+    ): Promise<string> {
+        try {
+            console.log(`🔄 Creating prompt-only KIE task...`);
+            console.log(`📍 API URL: ${this.baseUrl}/createTask`);
+            console.log(`📝 Prompt length: ${prompt.length} chars`);
+            console.log(`🤖 Model: ${model}`);
+            console.log(`🎞️  Image size: ${imageRatio}`);
+
+            const response = await fetch(`${this.baseUrl}/createTask`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.apiToken}`
+                },
+                body: JSON.stringify({
+                    model,
+                    callBackUrl: this.callbackUrl,
+                    input: {
+                        prompt,
+                        output_format: 'png',
+                        image_size: imageRatio
+                    }
+                })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`❌ KIE prompt-only HTTP error: ${response.status} ${response.statusText}`);
+                console.error(`❌ Response body: ${errorText}`);
+                throw new Error(`KIE API request failed: ${response.status} ${errorText}`);
+            }
+
+            const result: KIECreateTaskResponse = await response.json();
+
+            if (result.code !== 200) {
+                console.error(`❌ KIE prompt-only API error code: ${result.code}`);
+                console.error(`❌ KIE prompt-only API error message: ${result.message}`);
+                throw new Error(`KIE API error: ${result.message}`);
+            }
+
+            console.log(`✅ KIE prompt-only task created: ${result.data.taskId}`);
+            return result.data.taskId;
+        } catch (error) {
+            if (error instanceof Error) {
+                console.error(`❌ Prompt-only task error: ${error.message}`);
+                if (error.stack) {
+                    console.error(error.stack);
+                }
+            }
+            throw error;
+        }
+    }
+
+    /**
      * 针对 nano-banana-pro 的专用创建任务方法
      * 该模型要求不同的参数结构
      */
@@ -729,6 +792,69 @@ export class KIEImageService {
             return {
                 prompt: 'Outfit Change V2',
                 imageUrl: modelImageUrl,
+                success: false,
+                error: errorMessage,
+                timestamp: startTime
+            };
+        }
+    }
+
+    /**
+     * 根据纯文本描述生成模特图片（异步模式）
+     * @param prompt 描述提示词
+     * @param options 可选配置（风格、长宽比、模型）
+     */
+    async generateModelFromPrompt(
+        prompt: string,
+        options?: {
+            style?: string;
+            aspectRatio?: '9:16' | '1:1';
+            model?: string;
+        }
+    ): Promise<ImageGenerationResult & { taskId?: string }> {
+        const startTime = new Date();
+        const aspectRatio = options?.aspectRatio ?? '9:16';
+        const model = options?.model ?? 'google/nano-banana';
+        const finalPrompt = options?.style
+            ? `${prompt}\n\n风格关键词：${options.style}`
+            : prompt;
+
+        try {
+            console.log('🧍 Starting prompt-only model generation (async)...');
+            console.log(`📝 Prompt preview: ${finalPrompt.substring(0, 80)}...`);
+            console.log(`🎨 Style: ${options?.style || '默认'}`);
+            console.log(`🎞️  Aspect Ratio: ${aspectRatio}`);
+            console.log(`🤖 Model: ${model}`);
+
+            const taskId = await this.createPromptOnlyTask(finalPrompt, aspectRatio, model);
+            console.log(`✅ KIE prompt-only task created: ${taskId}`);
+
+            const metadata: KIETaskMetadata = {
+                taskId,
+                status: 'pending',
+                prompt: finalPrompt,
+                imageUrl: '',
+                createdAt: startTime.toISOString(),
+                updatedAt: startTime.toISOString(),
+            };
+
+            await saveKIETaskMetadata(metadata);
+
+            return {
+                prompt: finalPrompt,
+                imageUrl: '',
+                success: true,
+                timestamp: startTime,
+                taskId,
+                result: undefined
+            };
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error(`❌ Prompt-only model generation failed: ${errorMessage}`);
+
+            return {
+                prompt: finalPrompt,
+                imageUrl: '',
                 success: false,
                 error: errorMessage,
                 timestamp: startTime
