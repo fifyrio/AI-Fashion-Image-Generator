@@ -228,6 +228,18 @@ export default function Home() {
   const [imageEnhanceResultUrl, setImageEnhanceResultUrl] = useState<string | null>(null);
   const imageEnhanceFileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // 批量增强相关状态
+  const [batchEnhanceImages, setBatchEnhanceImages] = useState<Array<{
+    file: File;
+    preview: string;
+    uploadedUrl?: string;
+    enhancedUrl?: string;
+    status: 'pending' | 'uploading' | 'uploaded' | 'enhancing' | 'enhanced' | 'error';
+    error?: string;
+  }>>([]);
+  const [batchEnhanceMode, setBatchEnhanceMode] = useState(false);
+  const batchEnhanceFileInputRef = useRef<HTMLInputElement | null>(null);
+
   const clearMockProgressTimers = () => {
     if (progressIntervalRef.current) {
       clearInterval(progressIntervalRef.current);
@@ -1985,6 +1997,174 @@ export default function Home() {
     }
   };
 
+  // 批量上传图片
+  const handleBatchEnhanceFilesChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    const fileArray = Array.from(files);
+    const newImages = fileArray.map(file => ({
+      file,
+      preview: URL.createObjectURL(file),
+      status: 'pending' as const
+    }));
+
+    setBatchEnhanceImages(prev => [...prev, ...newImages]);
+
+    // 批量上传到 R2
+    for (let i = 0; i < newImages.length; i++) {
+      const image = newImages[i];
+      const index = batchEnhanceImages.length + i;
+
+      try {
+        // 更新状态为上传中
+        setBatchEnhanceImages(prev => {
+          const updated = [...prev];
+          updated[index] = { ...updated[index], status: 'uploading' };
+          return updated;
+        });
+
+        const formData = new FormData();
+        formData.append('files', image.file);
+
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          throw new Error('上传失败');
+        }
+
+        const data = await response.json();
+        const uploaded = data.uploaded?.[0];
+        if (!uploaded?.url) {
+          throw new Error('上传失败，未获取到 URL');
+        }
+
+        // 更新状态为已上传
+        setBatchEnhanceImages(prev => {
+          const updated = [...prev];
+          updated[index] = {
+            ...updated[index],
+            status: 'uploaded',
+            uploadedUrl: uploaded.url
+          };
+          return updated;
+        });
+      } catch (error) {
+        console.error('上传失败:', error);
+        setBatchEnhanceImages(prev => {
+          const updated = [...prev];
+          updated[index] = {
+            ...updated[index],
+            status: 'error',
+            error: error instanceof Error ? error.message : '上传失败'
+          };
+          return updated;
+        });
+      }
+    }
+
+    // 清空 input
+    if (event.target) {
+      event.target.value = '';
+    }
+  };
+
+  // 批量增强
+  const handleBatchEnhance = async () => {
+    const imagesToEnhance = batchEnhanceImages.filter(img => img.status === 'uploaded' && img.uploadedUrl);
+
+    if (imagesToEnhance.length === 0) {
+      setImageEnhanceError('没有可以增强的图片');
+      return;
+    }
+
+    setImageEnhanceGenerating(true);
+    setImageEnhanceError('');
+    setImageEnhanceStatus(`正在批量增强 ${imagesToEnhance.length} 张图片...`);
+
+    try {
+      const response = await fetch('/api/enhance-images-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          images: imagesToEnhance.map(img => ({
+            imageUrl: img.uploadedUrl
+          })),
+          enhanceModel: imageEnhanceModel,
+          outputFormat: 'jpg',
+          upscaleFactor: imageEnhanceUpscale,
+          faceEnhancement: imageEnhanceFaceEnhancement,
+          subjectDetection: 'Foreground',
+          faceEnhancementStrength: imageEnhanceFaceStrength,
+          faceEnhancementCreativity: imageEnhanceFaceCreativity
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw new Error(error?.error || '批量增强失败');
+      }
+
+      const data = await response.json();
+      const results = data.results || [];
+
+      // 更新每张图片的增强状态
+      setBatchEnhanceImages(prev => {
+        const updated = [...prev];
+        results.forEach((result: { success: boolean; originalUrl: string; enhancedUrl?: string; error?: string }) => {
+          const index = updated.findIndex(img => img.uploadedUrl === result.originalUrl);
+          if (index !== -1) {
+            if (result.success && result.enhancedUrl) {
+              updated[index] = {
+                ...updated[index],
+                status: 'enhanced',
+                enhancedUrl: result.enhancedUrl
+              };
+            } else {
+              updated[index] = {
+                ...updated[index],
+                status: 'error',
+                error: result.error || '增强失败'
+              };
+            }
+          }
+        });
+        return updated;
+      });
+
+      setImageEnhanceStatus(
+        `批量增强完成：${data.summary?.success || 0} 张成功，${data.summary?.failed || 0} 张失败`
+      );
+    } catch (error) {
+      console.error('批量增强失败:', error);
+      setImageEnhanceError(error instanceof Error ? error.message : '批量增强失败，请稍后重试');
+      setImageEnhanceStatus('');
+    } finally {
+      setImageEnhanceGenerating(false);
+    }
+  };
+
+  // 删除批量增强列表中的图片
+  const handleRemoveBatchImage = (index: number) => {
+    setBatchEnhanceImages(prev => {
+      const updated = [...prev];
+      URL.revokeObjectURL(updated[index].preview);
+      updated.splice(index, 1);
+      return updated;
+    });
+  };
+
+  // 清空批量增强列表
+  const handleClearBatchImages = () => {
+    batchEnhanceImages.forEach(img => URL.revokeObjectURL(img.preview));
+    setBatchEnhanceImages([]);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-8">
       <div className="max-w-6xl mx-auto">
@@ -3301,37 +3481,158 @@ export default function Home() {
                 ref={imageEnhanceFileInputRef}
                 onChange={handleImageEnhanceFileChange}
               />
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                ref={batchEnhanceFileInputRef}
+                onChange={handleBatchEnhanceFilesChange}
+              />
 
-              <div className="space-y-3">
-                <h2 className="text-2xl font-semibold text-gray-700">1. 上传或输入图片</h2>
-                <p className="text-sm text-gray-500">
-                  支持上传本地图片或直接粘贴在线图片链接，系统会自动上传到 R2 后再进行画质增强。
-                </p>
+              {/* 模式切换 */}
+              <div className="flex gap-4 p-4 bg-white rounded-xl shadow-sm border border-gray-200">
                 <button
-                  type="button"
-                  onClick={handleImageEnhanceUploadClick}
-                  disabled={imageEnhanceUploading}
-                  className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-semibold text-white transition ${
-                    imageEnhanceUploading
-                      ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-blue-600 to-indigo-500 hover:from-blue-500 hover:to-indigo-400'
+                  onClick={() => setBatchEnhanceMode(false)}
+                  className={`flex-1 px-6 py-3 rounded-lg font-semibold transition ${
+                    !batchEnhanceMode
+                      ? 'bg-purple-600 text-white shadow'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
-                  <span role="img" aria-hidden="true">📤</span>
-                  {imageEnhanceUploading ? '上传中...' : '上传图片'}
+                  单张增强
                 </button>
-                {imageEnhancePreview && (
-                  <div className="relative w-full h-72 bg-gray-100 rounded-2xl overflow-hidden border border-dashed border-purple-200">
-                    <Image
-                      src={imageEnhancePreview}
-                      alt="待增强的图片预览"
-                      fill
-                      className="object-contain"
-                      unoptimized
-                    />
-                  </div>
-                )}
+                <button
+                  onClick={() => setBatchEnhanceMode(true)}
+                  className={`flex-1 px-6 py-3 rounded-lg font-semibold transition ${
+                    batchEnhanceMode
+                      ? 'bg-purple-600 text-white shadow'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  批量增强
+                </button>
               </div>
+
+              {!batchEnhanceMode ? (
+                <>
+                  <div className="space-y-3">
+                    <h2 className="text-2xl font-semibold text-gray-700">1. 上传或输入图片</h2>
+                    <p className="text-sm text-gray-500">
+                      支持上传本地图片或直接粘贴在线图片链接，系统会自动上传到 R2 后再进行画质增强。
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleImageEnhanceUploadClick}
+                      disabled={imageEnhanceUploading}
+                      className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-semibold text-white transition ${
+                        imageEnhanceUploading
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : 'bg-gradient-to-r from-blue-600 to-indigo-500 hover:from-blue-500 hover:to-indigo-400'
+                      }`}
+                    >
+                      <span role="img" aria-hidden="true">📤</span>
+                      {imageEnhanceUploading ? '上传中...' : '上传图片'}
+                    </button>
+                    {imageEnhancePreview && (
+                      <div className="relative w-full h-72 bg-gray-100 rounded-2xl overflow-hidden border border-dashed border-purple-200">
+                        <Image
+                          src={imageEnhancePreview}
+                          alt="待增强的图片预览"
+                          fill
+                          className="object-contain"
+                          unoptimized
+                        />
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-3">
+                    <h2 className="text-2xl font-semibold text-gray-700">1. 批量上传图片</h2>
+                    <p className="text-sm text-gray-500">
+                      支持一次选择多张图片进行批量上传和增强。
+                    </p>
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => batchEnhanceFileInputRef.current?.click()}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-500 hover:from-blue-500 hover:to-indigo-400 transition"
+                      >
+                        <span role="img" aria-hidden="true">📤</span>
+                        选择图片
+                      </button>
+                      {batchEnhanceImages.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleClearBatchImages}
+                          className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 transition"
+                        >
+                          <span role="img" aria-hidden="true">🗑️</span>
+                          清空列表
+                        </button>
+                      )}
+                    </div>
+
+                    {batchEnhanceImages.length > 0 && (
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
+                        {batchEnhanceImages.map((image, index) => (
+                          <div key={index} className="relative bg-white rounded-lg border border-gray-200 p-2 shadow-sm">
+                            <div className="relative w-full h-32 bg-gray-100 rounded overflow-hidden mb-2">
+                              <Image
+                                src={image.enhancedUrl || image.preview}
+                                alt={`批量图片 ${index + 1}`}
+                                fill
+                                className="object-cover"
+                                unoptimized
+                              />
+                            </div>
+                            <div className="flex items-center justify-between text-xs">
+                              <span className={`px-2 py-1 rounded ${
+                                image.status === 'pending' ? 'bg-gray-200 text-gray-700' :
+                                image.status === 'uploading' ? 'bg-blue-200 text-blue-700' :
+                                image.status === 'uploaded' ? 'bg-green-200 text-green-700' :
+                                image.status === 'enhancing' ? 'bg-yellow-200 text-yellow-700' :
+                                image.status === 'enhanced' ? 'bg-purple-200 text-purple-700' :
+                                'bg-red-200 text-red-700'
+                              }`}>
+                                {image.status === 'pending' && '待上传'}
+                                {image.status === 'uploading' && '上传中'}
+                                {image.status === 'uploaded' && '已上传'}
+                                {image.status === 'enhancing' && '增强中'}
+                                {image.status === 'enhanced' && '已增强'}
+                                {image.status === 'error' && '失败'}
+                              </span>
+                              <div className="flex gap-1">
+                                {image.enhancedUrl && (
+                                  <a
+                                    href={`/api/download?url=${encodeURIComponent(image.enhancedUrl)}&filename=enhanced-${index + 1}.jpg`}
+                                    className="p-1 text-purple-600 hover:text-purple-700"
+                                    title="下载"
+                                  >
+                                    ⬇️
+                                  </a>
+                                )}
+                                <button
+                                  onClick={() => handleRemoveBatchImage(index)}
+                                  className="p-1 text-red-600 hover:text-red-700"
+                                  title="删除"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            </div>
+                            {image.error && (
+                              <div className="text-xs text-red-600 mt-1">{image.error}</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
 
               <div className="grid gap-6 md:grid-cols-2">
                 <div className="space-y-4">
@@ -3439,10 +3740,10 @@ export default function Home() {
 
               <div className="space-y-3">
                 <button
-                  onClick={handleImageEnhanceGenerate}
-                  disabled={imageEnhanceGenerating}
+                  onClick={batchEnhanceMode ? handleBatchEnhance : handleImageEnhanceGenerate}
+                  disabled={imageEnhanceGenerating || (batchEnhanceMode && batchEnhanceImages.filter(img => img.status === 'uploaded').length === 0)}
                   className={`inline-flex items-center justify-center gap-3 rounded-xl px-6 py-3 font-semibold text-white transition ${
-                    imageEnhanceGenerating
+                    imageEnhanceGenerating || (batchEnhanceMode && batchEnhanceImages.filter(img => img.status === 'uploaded').length === 0)
                       ? 'bg-gray-400 cursor-not-allowed'
                       : 'bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400'
                   }`}
@@ -3454,7 +3755,7 @@ export default function Home() {
                       增强中...
                     </span>
                   ) : (
-                    '开始画质增强'
+                    batchEnhanceMode ? `批量增强 (${batchEnhanceImages.filter(img => img.status === 'uploaded').length} 张)` : '开始画质增强'
                   )}
                 </button>
 
@@ -3471,7 +3772,7 @@ export default function Home() {
                 )}
               </div>
 
-              {imageEnhanceResultUrl && (
+              {!batchEnhanceMode && imageEnhanceResultUrl && (
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
                     <span className="text-2xl">✅</span>
