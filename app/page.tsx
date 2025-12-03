@@ -127,6 +127,7 @@ export default function Home() {
   const [modelPoseError, setModelPoseError] = useState<string>('');
   const [selectedPoseIndices, setSelectedPoseIndices] = useState<number[]>([]);
   const [modelPoseGenerating, setModelPoseGenerating] = useState(false);
+  const [modelPoseDragging, setModelPoseDragging] = useState(false);
   const [modelPoseGeneratedImages, setModelPoseGeneratedImages] = useState<Array<{poseIndex: number, pose: string, imageUrl: string, status: 'generating' | 'completed' | 'failed', error?: string}>>([]);
   const [modelHoldingPhone, setModelHoldingPhone] = useState(false);
   const [modelWearingMask, setModelWearingMask] = useState(false);
@@ -905,6 +906,46 @@ export default function Home() {
     reader.readAsDataURL(file);
   };
 
+  const handleModelPoseDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setModelPoseDragging(true);
+  };
+
+  const handleModelPoseDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setModelPoseDragging(false);
+  };
+
+  const handleModelPoseDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setModelPoseDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+
+      // Check if it's an image
+      if (!file.type.startsWith('image/')) {
+        setModelPoseError('请上传图片文件');
+        return;
+      }
+
+      setModelPoseFile(file);
+      setModelPoseError('');
+      setModelPoseAnalysis(null);
+
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setModelPosePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleModelPoseAnalyze = async () => {
     if (!modelPoseFile) {
       setModelPoseError('请先选择一张图片');
@@ -1044,8 +1085,8 @@ export default function Home() {
           console.log(`Task created for pose ${poseIndex}:`, taskId);
 
           // 轮询任务状态（PRO 模型需要更长时间）
-          const maxAttempts = modelPoseUseProModel ? 180 : 60; // PRO 模型最长等待约6分钟
-          const pollInterval = 2000;
+          const maxAttempts = modelPoseUseProModel ? 120 : 40; // PRO 模型最长等待约10分钟，普通模型约3.3分钟
+          const pollInterval = 5000; // 5秒轮询一次，减少服务器压力
 
           for (let attempt = 0; attempt < maxAttempts; attempt++) {
             await new Promise(resolve => setTimeout(resolve, pollInterval));
@@ -1177,9 +1218,9 @@ export default function Home() {
   };
 
   // 通用轮询函数
-  const pollTaskStatus = async (taskId: string, maxAttempts = 60): Promise<string> => {
+  const pollTaskStatus = async (taskId: string, maxAttempts = 40): Promise<string> => {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 5000)); // 5秒轮询一次
 
       const statusResponse = await fetch(`/api/task-status?taskId=${taskId}`);
 
@@ -1712,8 +1753,8 @@ export default function Home() {
       console.log('Mimic reference generation task created:', taskId);
 
       // Poll for task status
-      const maxAttempts = 60;
-      const pollInterval = 2000;
+      const maxAttempts = 40; // 最长等待约3.3分钟
+      const pollInterval = 5000; // 5秒轮询一次，减少服务器压力
 
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
         await new Promise(resolve => setTimeout(resolve, pollInterval));
@@ -2704,36 +2745,54 @@ export default function Home() {
 
                 {/* Upload Area */}
                 {!modelPoseFile ? (
-                  <label
-                    htmlFor="model-pose-upload"
-                    className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer transition-all border-gray-300 bg-gray-50 hover:bg-gray-100"
+                  <div
+                    onDragOver={handleModelPoseDragOver}
+                    onDragLeave={handleModelPoseDragLeave}
+                    onDrop={handleModelPoseDrop}
+                    className={`flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer transition-all ${
+                      modelPoseDragging
+                        ? 'border-purple-500 bg-purple-50 scale-105'
+                        : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
+                    }`}
                   >
-                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                      <svg
-                        className="w-16 h-16 mb-4 text-gray-400"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                        />
-                      </svg>
-                      <div className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold py-3 px-8 rounded-lg mb-4">
-                        <div className="flex items-center gap-2">
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                          </svg>
-                          上传服装图片
+                    <label
+                      htmlFor="model-pose-upload"
+                      className="flex flex-col items-center justify-center w-full h-full cursor-pointer"
+                    >
+                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                        <svg
+                          className={`w-16 h-16 mb-4 transition-colors ${
+                            modelPoseDragging ? 'text-purple-500' : 'text-gray-400'
+                          }`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                          />
+                        </svg>
+                        <div className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold py-3 px-8 rounded-lg mb-4">
+                          <div className="flex items-center gap-2">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            </svg>
+                            {modelPoseDragging ? '松开鼠标上传' : '上传服装图片'}
+                          </div>
                         </div>
+                        <p className="text-sm text-gray-500">
+                          {modelPoseDragging
+                            ? '松开鼠标即可上传'
+                            : '点击上传或拖拽图片到此处'}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          支持 JPEG、PNG、GIF 格式
+                        </p>
                       </div>
-                      <p className="text-sm text-gray-500">
-                        支持 JPEG、PNG、GIF 格式
-                      </p>
-                    </div>
+                    </label>
                     <input
                       id="model-pose-upload"
                       type="file"
@@ -2741,7 +2800,7 @@ export default function Home() {
                       accept="image/*"
                       onChange={handleModelPoseFileChange}
                     />
-                  </label>
+                  </div>
                 ) : (
                   <div className="space-y-4">
                     {/* Image Preview */}

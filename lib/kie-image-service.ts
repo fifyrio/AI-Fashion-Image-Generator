@@ -95,9 +95,25 @@ export class KIEImageService {
             console.log(`📍 API URL: ${this.baseUrl}/createTask`);
             console.log(`📝 Prompt length: ${prompt.length} chars`);
             console.log(`🖼️  Image URLs: ${urls.length} image(s)`);
+            urls.forEach((url, index) => {
+                console.log(`   Image ${index + 1}: ${url}`);
+            });
             console.log(`🤖 Model: ${model}`);
             console.log(`🔑 Token configured: ${this.apiToken ? 'Yes' : 'No'}`);
             console.log(`🔗 Callback URL: ${this.callbackUrl || 'Not configured'}`);
+
+            const requestBody = {
+                model,
+                callBackUrl: this.callbackUrl,
+                input: {
+                    prompt: prompt,
+                    image_urls: urls,
+                    output_format: 'png',
+                    image_size: imageRatio
+                }
+            };
+
+            console.log(`📤 Request body:`, JSON.stringify(requestBody, null, 2));
 
             const response = await fetch(`${this.baseUrl}/createTask`, {
                 method: 'POST',
@@ -105,16 +121,7 @@ export class KIEImageService {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${this.apiToken}`
                 },
-                body: JSON.stringify({
-                    model,
-                    callBackUrl: this.callbackUrl,
-                    input: {
-                        prompt: prompt,
-                        image_urls: urls,
-                        output_format: 'png',
-                        image_size: imageRatio
-                    }
-                })
+                body: JSON.stringify(requestBody)
             });
 
             if (!response.ok) {
@@ -124,12 +131,24 @@ export class KIEImageService {
                 throw new Error(`KIE API request failed: ${response.status} ${errorText}`);
             }
 
-            const result: KIECreateTaskResponse = await response.json();
+            const responseText = await response.text();
+            console.log(`📦 KIE API Response: ${responseText}`);
+
+            let result: KIECreateTaskResponse;
+            try {
+                result = JSON.parse(responseText);
+            } catch (parseError) {
+                console.error(`❌ Failed to parse KIE API response as JSON`);
+                console.error(`❌ Response text: ${responseText}`);
+                throw new Error(`KIE API returned invalid JSON: ${responseText.substring(0, 200)}`);
+            }
 
             if (result.code !== 200) {
                 console.error(`❌ KIE API error code: ${result.code}`);
-                console.error(`❌ KIE API error message: ${result.message}`);
-                throw new Error(`KIE API error: ${result.message}`);
+                console.error(`❌ KIE API error message: ${result.message || 'No error message provided'}`);
+                console.error(`❌ Full response:`, JSON.stringify(result, null, 2));
+                const errorMsg = result.message || `Unknown error (code: ${result.code})`;
+                throw new Error(`KIE API error: ${errorMsg}`);
             }
 
             console.log(`✅ KIE task created: ${result.data.taskId}`);
@@ -192,12 +211,24 @@ export class KIEImageService {
                 throw new Error(`KIE API request failed: ${response.status} ${errorText}`);
             }
 
-            const result: KIECreateTaskResponse = await response.json();
+            const responseText = await response.text();
+            console.log(`📦 KIE prompt-only API Response: ${responseText}`);
+
+            let result: KIECreateTaskResponse;
+            try {
+                result = JSON.parse(responseText);
+            } catch (parseError) {
+                console.error(`❌ Failed to parse KIE prompt-only API response as JSON`);
+                console.error(`❌ Response text: ${responseText}`);
+                throw new Error(`KIE API returned invalid JSON: ${responseText.substring(0, 200)}`);
+            }
 
             if (result.code !== 200) {
                 console.error(`❌ KIE prompt-only API error code: ${result.code}`);
-                console.error(`❌ KIE prompt-only API error message: ${result.message}`);
-                throw new Error(`KIE API error: ${result.message}`);
+                console.error(`❌ KIE prompt-only API error message: ${result.message || 'No error message provided'}`);
+                console.error(`❌ Full response:`, JSON.stringify(result, null, 2));
+                const errorMsg = result.message || `Unknown error (code: ${result.code})`;
+                throw new Error(`KIE API error: ${errorMsg}`);
             }
 
             console.log(`✅ KIE prompt-only task created: ${result.data.taskId}`);
@@ -230,10 +261,27 @@ export class KIEImageService {
             console.log(`📍 API URL: ${this.baseUrl}/createTask`);
             console.log(`📝 Prompt length: ${prompt.length} chars`);
             console.log(`🖼️  Image inputs: ${urls.length} image(s)`);
+            urls.forEach((url, index) => {
+                console.log(`   Image ${index + 1}: ${url}`);
+            });
             console.log(`🎞️  Aspect Ratio: ${aspectRatio}`);
             console.log(`🖥️  Resolution: ${resolution}`);
             console.log(`🔑 Token configured: ${this.apiToken ? 'Yes' : 'No'}`);
             console.log(`🔗 Callback URL: ${this.callbackUrl || 'Not configured'}`);
+
+            const requestBody = {
+                model: 'nano-banana-pro',
+                callBackUrl: this.callbackUrl,
+                input: {
+                    prompt,
+                    image_input: urls,
+                    aspect_ratio: aspectRatio,
+                    resolution,
+                    output_format: 'png'
+                }
+            };
+
+            console.log(`📤 PRO Request body:`, JSON.stringify(requestBody, null, 2));
 
             const response = await fetch(`${this.baseUrl}/createTask`, {
                 method: 'POST',
@@ -241,17 +289,7 @@ export class KIEImageService {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${this.apiToken}`
                 },
-                body: JSON.stringify({
-                    model: 'nano-banana-pro',
-                    callBackUrl: this.callbackUrl,
-                    input: {
-                        prompt,
-                        image_input: urls,
-                        aspect_ratio: aspectRatio,
-                        resolution,
-                        output_format: 'png'
-                    }
-                })
+                body: JSON.stringify(requestBody)
             });
 
             if (!response.ok) {
@@ -261,12 +299,24 @@ export class KIEImageService {
                 throw new Error(`KIE PRO API request failed: ${response.status} ${errorText}`);
             }
 
-            const result: KIECreateTaskResponse = await response.json();
+            const responseText = await response.text();
+            console.log(`📦 KIE PRO API Response: ${responseText}`);
+
+            let result: KIECreateTaskResponse;
+            try {
+                result = JSON.parse(responseText);
+            } catch (parseError) {
+                console.error(`❌ Failed to parse KIE PRO API response as JSON`);
+                console.error(`❌ Response text: ${responseText}`);
+                throw new Error(`KIE PRO API returned invalid JSON: ${responseText.substring(0, 200)}`);
+            }
 
             if (result.code !== 200) {
                 console.error(`❌ KIE PRO API error code: ${result.code}`);
-                console.error(`❌ KIE PRO API error message: ${result.message}`);
-                throw new Error(`KIE PRO API error: ${result.message}`);
+                console.error(`❌ KIE PRO API error message: ${result.message || 'No error message provided'}`);
+                console.error(`❌ Full response:`, JSON.stringify(result, null, 2));
+                const errorMsg = result.message || `Unknown error (code: ${result.code})`;
+                throw new Error(`KIE PRO API error: ${errorMsg}`);
             }
 
             console.log(`✅ KIE PRO task created: ${result.data.taskId}`);
