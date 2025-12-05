@@ -37,5 +37,8 @@
     "ai",
     "nextjs"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=23.0.0"
+  }
 }
