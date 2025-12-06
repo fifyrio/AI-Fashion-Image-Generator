@@ -7,7 +7,10 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "batch-metadata": "npx tsx scripts/batch-add-metadata.ts",
+    "verify-metadata": "npx tsx scripts/verify-metadata.ts",
+    "test-copywriting": "npx tsx scripts/test-copywriting.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.723.0",

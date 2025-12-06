@@ -9,6 +9,8 @@ AI-powered fashion image generator using OpenRouter and Cloudflare R2 storage. B
 - 👤 Multiple character models (Lin, Qiao, Ayi, etc.)
 - ☁️ Cloudflare R2 cloud storage
 - 📝 Automatic Xiaohongshu (小红书) title generation
+- ✍️ **AI 爆款文案生成** - 分析并生成类似风格的小红书文案
+- 🖼️ **批量图片元数据处理** - 为图片添加 iPhone 13 EXIF 元数据
 - 🚀 Optimized for Vercel deployment
 
 ## Tech Stack
@@ -72,11 +74,21 @@ AI-powered fashion image generator using OpenRouter and Cloudflare R2 storage. B
 ## Scripts
 
 ```bash
-npm run dev      # Start development server
-npm run build    # Build for production
-npm start        # Start production server
-npm run lint     # Run ESLint
+npm run dev              # Start development server
+npm run build            # Build for production
+npm start                # Start production server
+npm run lint             # Run ESLint
+
+# 新增功能
+npm run batch-metadata   # 批量为图片添加 iPhone 13 元数据
+npm run verify-metadata  # 验证图片元数据
+npm run test-copywriting # 测试文案生成功能
 ```
+
+## 📚 详细文档
+
+- [爆款文案生成使用指南](docs/COPYWRITING_GUIDE.md) - 了解如何使用 AI 生成小红书爆款文案
+- [图片元数据处理指南](scripts/README.md) - 批量添加和验证图片 EXIF 元数据
 
 ## License
 
