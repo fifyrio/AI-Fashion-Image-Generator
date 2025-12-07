@@ -118,6 +118,8 @@ export default function Home() {
   // Model-Pose tab states
   const [modelPoseFile, setModelPoseFile] = useState<File | null>(null);
   const [modelPosePreview, setModelPosePreview] = useState<string>('');
+  const [downloadDirPrefix, setDownloadDirPrefix] = useState<string>('模特姿势');
+  const [showDownloadSettings, setShowDownloadSettings] = useState(false);
   const [modelPoseUploadedUrl, setModelPoseUploadedUrl] = useState<string>('');
   const [modelPoseAnalyzing, setModelPoseAnalyzing] = useState(false);
   const [modelPoseAnalysis, setModelPoseAnalysis] = useState<{
@@ -3205,36 +3207,94 @@ export default function Home() {
                                   )}
                                 </div>
                                 {modelPoseGeneratedImages.filter(img => img.status === 'completed').length > 0 && (
-                                  <button
-                                    onClick={async () => {
-                                      const completedImages = modelPoseGeneratedImages.filter(img => img.status === 'completed');
-                                      for (let i = 0; i < completedImages.length; i++) {
-                                        const item = completedImages[i];
-                                        try {
-                                          // 使用代理 API 下载图片
-                                          const downloadUrl = `/api/download?url=${encodeURIComponent(item.imageUrl)}&filename=model-pose-${item.poseIndex + 1}.png`;
-                                          const a = document.createElement('a');
-                                          a.href = downloadUrl;
-                                          a.download = `model-pose-${item.poseIndex + 1}.png`;
-                                          document.body.appendChild(a);
-                                          a.click();
-                                          document.body.removeChild(a);
-                                          // 添加延迟避免浏览器阻止多个下载
-                                          if (i < completedImages.length - 1) {
-                                            await new Promise(resolve => setTimeout(resolve, 500));
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={async () => {
+                                        const completedImages = modelPoseGeneratedImages.filter(img => img.status === 'completed');
+                                        const dirName = `${downloadDirPrefix}_${character}`;
+                                        for (let i = 0; i < completedImages.length; i++) {
+                                          const item = completedImages[i];
+                                          try {
+                                            // 使用新的文件命名格式: 目录前缀_模特名称_姿势X.png
+                                            const filename = `${dirName}_姿势${item.poseIndex + 1}.png`;
+                                            const downloadUrl = `/api/download?url=${encodeURIComponent(item.imageUrl)}&filename=${encodeURIComponent(filename)}`;
+                                            const a = document.createElement('a');
+                                            a.href = downloadUrl;
+                                            a.download = filename;
+                                            document.body.appendChild(a);
+                                            a.click();
+                                            document.body.removeChild(a);
+                                            // 添加延迟避免浏览器阻止多个下载
+                                            if (i < completedImages.length - 1) {
+                                              await new Promise(resolve => setTimeout(resolve, 500));
+                                            }
+                                          } catch (error) {
+                                            console.error(`下载图片 ${item.poseIndex + 1} 失败:`, error);
                                           }
-                                        } catch (error) {
-                                          console.error(`下载图片 ${item.poseIndex + 1} 失败:`, error);
                                         }
-                                      }
-                                    }}
-                                    className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:from-blue-600 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-medium"
-                                  >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                    </svg>
-                                    一键下载
-                                  </button>
+                                      }}
+                                      className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:from-blue-600 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-medium"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                      </svg>
+                                      一键下载 ({downloadDirPrefix}_{character})
+                                    </button>
+                                    <button
+                                      onClick={() => setShowDownloadSettings(!showDownloadSettings)}
+                                      className="px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-medium"
+                                      title="下载设置"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                )}
+                                {showDownloadSettings && (
+                                  <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg p-4 border border-purple-200 space-y-3">
+                                    <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                      </svg>
+                                      下载设置
+                                    </div>
+                                    <div className="space-y-2">
+                                      <label className="text-sm text-gray-600">文件名前缀：</label>
+                                      <input
+                                        type="text"
+                                        value={downloadDirPrefix}
+                                        onChange={(e) => setDownloadDirPrefix(e.target.value)}
+                                        placeholder="例如：模特姿势、展示图"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                      />
+                                      <p className="text-xs text-gray-500">
+                                        文件将命名为：<span className="font-mono text-purple-600">{downloadDirPrefix}_{character}_姿势X.png</span>
+                                      </p>
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <button
+                                        onClick={() => setDownloadDirPrefix('模特姿势')}
+                                        className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-xs"
+                                      >
+                                        默认
+                                      </button>
+                                      <button
+                                        onClick={() => setDownloadDirPrefix('展示图')}
+                                        className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-xs"
+                                      >
+                                        展示图
+                                      </button>
+                                      <button
+                                        onClick={() => setDownloadDirPrefix('产品图')}
+                                        className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-xs"
+                                      >
+                                        产品图
+                                      </button>
+                                    </div>
+                                  </div>
                                 )}
                               </div>
                             </div>
