@@ -193,7 +193,6 @@ export default function Home() {
   const [mimicRefAnalyzing, setMimicRefAnalyzing] = useState(false);
   const [mimicRefAnalysis, setMimicRefAnalysis] = useState<{
     sceneDescription: string;
-    poseDescription: string;
   } | null>(null);
   const [mimicRefError, setMimicRefError] = useState<string>('');
   const [mimicRefIsDragging, setMimicRefIsDragging] = useState(false);
@@ -1833,8 +1832,8 @@ export default function Home() {
     setMimicRefGeneratedImage(null);
 
     try {
-      // Combine scene and pose descriptions into a prompt
-      const prompt = `${mimicRefAnalysis.sceneDescription}\n\n${mimicRefAnalysis.poseDescription}`;
+      // Only use scene description as the prompt
+      const prompt = mimicRefAnalysis.sceneDescription;
 
       // Call the generation API
       const createResponse = await fetch('/api/generate-mimic-reference', {
@@ -4752,7 +4751,7 @@ export default function Home() {
                     ) : (
                       <>
                         <span className="text-xl">🤖</span>
-                        <span>AI 分析场景和姿势</span>
+                        <span>AI 分析场景环境</span>
                       </>
                     )}
                   </button>
@@ -4776,28 +4775,17 @@ export default function Home() {
                     {/* Scene Description */}
                     <div className="bg-white rounded-lg p-5 space-y-3">
                       <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                        <span className="text-xl">🎭</span>
-                        <span>场景描述：</span>
+                        <span className="text-xl">🎬</span>
+                        <span>场景环境描述：</span>
                       </h4>
                       <div className="text-gray-700 leading-relaxed whitespace-pre-wrap bg-gray-50 rounded-lg p-4 border border-gray-200">
                         {mimicRefAnalysis.sceneDescription}
                       </div>
                     </div>
 
-                    {/* Pose Description */}
-                    <div className="bg-white rounded-lg p-5 space-y-3">
-                      <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                        <span className="text-xl">💃</span>
-                        <span>姿势描述：</span>
-                      </h4>
-                      <div className="text-gray-700 leading-relaxed whitespace-pre-wrap bg-gray-50 rounded-lg p-4 border border-gray-200">
-                        {mimicRefAnalysis.poseDescription}
-                      </div>
-                    </div>
-
                     <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                       <p className="text-sm text-blue-800 text-center">
-                        ✅ 分析完成！您可以使用这些描述在其他工具中重现相似的场景和姿势
+                        ✅ 场景分析完成！点击下方"上传图片生成"按钮，可以将模特放到此场景中（保持模特原有姿势和身材）
                       </p>
                     </div>
                   </div>
@@ -4808,7 +4796,7 @@ export default function Home() {
               {mimicRefAnalysis && (
                 <div className="space-y-4">
                   <h2 className="text-2xl font-semibold text-gray-700">
-                    选择模特并生成图片
+                    选择模特并生成图片（保持模特姿势，只换背景）
                   </h2>
 
                   {/* Character Selection */}
@@ -4868,7 +4856,7 @@ export default function Home() {
                     ) : (
                       <>
                         <span className="text-xl">✨</span>
-                        <span>生成模特图片</span>
+                        <span>生成图片（保持姿势换背景）</span>
                       </>
                     )}
                   </button>
