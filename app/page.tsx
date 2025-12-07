@@ -3477,162 +3477,137 @@ export default function Home() {
               <input
                 type="file"
                 accept="image/*"
-                className="hidden"
-                ref={imageEnhanceFileInputRef}
-                onChange={handleImageEnhanceFileChange}
-              />
-              <input
-                type="file"
-                accept="image/*"
                 multiple
                 className="hidden"
                 ref={batchEnhanceFileInputRef}
                 onChange={handleBatchEnhanceFilesChange}
               />
 
-              {/* 模式切换 */}
-              <div className="flex gap-4 p-4 bg-white rounded-xl shadow-sm border border-gray-200">
-                <button
-                  onClick={() => setBatchEnhanceMode(false)}
-                  className={`flex-1 px-6 py-3 rounded-lg font-semibold transition ${
-                    !batchEnhanceMode
-                      ? 'bg-purple-600 text-white shadow'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  单张增强
-                </button>
-                <button
-                  onClick={() => setBatchEnhanceMode(true)}
-                  className={`flex-1 px-6 py-3 rounded-lg font-semibold transition ${
-                    batchEnhanceMode
-                      ? 'bg-purple-600 text-white shadow'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  批量增强
-                </button>
-              </div>
+              {/* 上传区域 */}
+              <div className="space-y-3">
+                <h2 className="text-2xl font-semibold text-gray-700">1. 上传图片</h2>
+                <p className="text-sm text-gray-500">
+                  支持拖拽上传多张图片，或点击按钮选择图片进行批量增强。
+                </p>
 
-              {!batchEnhanceMode ? (
-                <>
-                  <div className="space-y-3">
-                    <h2 className="text-2xl font-semibold text-gray-700">1. 上传或输入图片</h2>
-                    <p className="text-sm text-gray-500">
-                      支持上传本地图片或直接粘贴在线图片链接，系统会自动上传到 R2 后再进行画质增强。
-                    </p>
+                {/* 拖拽上传区域 */}
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.classList.add('border-purple-400', 'bg-purple-50');
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.classList.remove('border-purple-400', 'bg-purple-50');
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.classList.remove('border-purple-400', 'bg-purple-50');
+                    const files = Array.from(e.dataTransfer.files);
+                    if (files.length > 0) {
+                      const imageFiles = files.filter(file => file.type.startsWith('image/'));
+                      if (imageFiles.length > 0) {
+                        const event = {
+                          target: {
+                            files: imageFiles
+                          }
+                        } as unknown as React.ChangeEvent<HTMLInputElement>;
+                        handleBatchEnhanceFilesChange(event);
+                      }
+                    }
+                  }}
+                  className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-purple-400 hover:bg-purple-50 transition cursor-pointer"
+                  onClick={() => batchEnhanceFileInputRef.current?.click()}
+                >
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="text-6xl">📤</div>
+                    <div className="text-lg font-semibold text-gray-700">
+                      拖拽图片到此处，或点击选择
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      支持 JPG、PNG、WebP 等格式，可一次选择多张图片
+                    </div>
+                  </div>
+                </div>
+
+                {/* 图片列表和操作按钮 */}
+                {batchEnhanceImages.length > 0 && (
+                  <div className="flex gap-3 mt-4">
                     <button
                       type="button"
-                      onClick={handleImageEnhanceUploadClick}
-                      disabled={imageEnhanceUploading}
-                      className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-semibold text-white transition ${
-                        imageEnhanceUploading
-                          ? 'bg-gray-400 cursor-not-allowed'
-                          : 'bg-gradient-to-r from-blue-600 to-indigo-500 hover:from-blue-500 hover:to-indigo-400'
-                      }`}
+                      onClick={() => batchEnhanceFileInputRef.current?.click()}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-500 hover:from-blue-500 hover:to-indigo-400 transition"
                     >
-                      <span role="img" aria-hidden="true">📤</span>
-                      {imageEnhanceUploading ? '上传中...' : '上传图片'}
+                      <span role="img" aria-hidden="true">➕</span>
+                      添加更多图片
                     </button>
-                    {imageEnhancePreview && (
-                      <div className="relative w-full h-72 bg-gray-100 rounded-2xl overflow-hidden border border-dashed border-purple-200">
-                        <Image
-                          src={imageEnhancePreview}
-                          alt="待增强的图片预览"
-                          fill
-                          className="object-contain"
-                          unoptimized
-                        />
-                      </div>
-                    )}
+                    <button
+                      type="button"
+                      onClick={handleClearBatchImages}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 transition"
+                    >
+                      <span role="img" aria-hidden="true">🗑️</span>
+                      清空列表 ({batchEnhanceImages.length})
+                    </button>
                   </div>
-                </>
-              ) : (
-                <>
-                  <div className="space-y-3">
-                    <h2 className="text-2xl font-semibold text-gray-700">1. 批量上传图片</h2>
-                    <p className="text-sm text-gray-500">
-                      支持一次选择多张图片进行批量上传和增强。
-                    </p>
-                    <div className="flex gap-3">
-                      <button
-                        type="button"
-                        onClick={() => batchEnhanceFileInputRef.current?.click()}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-500 hover:from-blue-500 hover:to-indigo-400 transition"
-                      >
-                        <span role="img" aria-hidden="true">📤</span>
-                        选择图片
-                      </button>
-                      {batchEnhanceImages.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={handleClearBatchImages}
-                          className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 transition"
-                        >
-                          <span role="img" aria-hidden="true">🗑️</span>
-                          清空列表
-                        </button>
-                      )}
-                    </div>
+                )}
 
-                    {batchEnhanceImages.length > 0 && (
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
-                        {batchEnhanceImages.map((image, index) => (
-                          <div key={index} className="relative bg-white rounded-lg border border-gray-200 p-2 shadow-sm">
-                            <div className="relative w-full h-32 bg-gray-100 rounded overflow-hidden mb-2">
-                              <Image
-                                src={image.enhancedUrl || image.preview}
-                                alt={`批量图片 ${index + 1}`}
-                                fill
-                                className="object-cover"
-                                unoptimized
-                              />
-                            </div>
-                            <div className="flex items-center justify-between text-xs">
-                              <span className={`px-2 py-1 rounded ${
-                                image.status === 'pending' ? 'bg-gray-200 text-gray-700' :
-                                image.status === 'uploading' ? 'bg-blue-200 text-blue-700' :
-                                image.status === 'uploaded' ? 'bg-green-200 text-green-700' :
-                                image.status === 'enhancing' ? 'bg-yellow-200 text-yellow-700' :
-                                image.status === 'enhanced' ? 'bg-purple-200 text-purple-700' :
-                                'bg-red-200 text-red-700'
-                              }`}>
-                                {image.status === 'pending' && '待上传'}
-                                {image.status === 'uploading' && '上传中'}
-                                {image.status === 'uploaded' && '已上传'}
-                                {image.status === 'enhancing' && '增强中'}
-                                {image.status === 'enhanced' && '已增强'}
-                                {image.status === 'error' && '失败'}
-                              </span>
-                              <div className="flex gap-1">
-                                {image.enhancedUrl && (
-                                  <a
-                                    href={`/api/download?url=${encodeURIComponent(image.enhancedUrl)}&filename=enhanced-${index + 1}.jpg`}
-                                    className="p-1 text-purple-600 hover:text-purple-700"
-                                    title="下载"
-                                  >
-                                    ⬇️
-                                  </a>
-                                )}
-                                <button
-                                  onClick={() => handleRemoveBatchImage(index)}
-                                  className="p-1 text-red-600 hover:text-red-700"
-                                  title="删除"
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            </div>
-                            {image.error && (
-                              <div className="text-xs text-red-600 mt-1">{image.error}</div>
+                {batchEnhanceImages.length > 0 && (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
+                    {batchEnhanceImages.map((image, index) => (
+                      <div key={index} className="relative bg-white rounded-lg border border-gray-200 p-2 shadow-sm hover:shadow-md transition">
+                        <div className="relative w-full h-32 bg-gray-100 rounded overflow-hidden mb-2">
+                          <Image
+                            src={image.enhancedUrl || image.preview}
+                            alt={`图片 ${index + 1}`}
+                            fill
+                            className="object-cover"
+                            unoptimized
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className={`px-2 py-1 rounded font-medium ${
+                            image.status === 'pending' ? 'bg-gray-200 text-gray-700' :
+                            image.status === 'uploading' ? 'bg-blue-200 text-blue-700' :
+                            image.status === 'uploaded' ? 'bg-green-200 text-green-700' :
+                            image.status === 'enhancing' ? 'bg-yellow-200 text-yellow-700' :
+                            image.status === 'enhanced' ? 'bg-purple-200 text-purple-700' :
+                            'bg-red-200 text-red-700'
+                          }`}>
+                            {image.status === 'pending' && '待上传'}
+                            {image.status === 'uploading' && '上传中'}
+                            {image.status === 'uploaded' && '已上传'}
+                            {image.status === 'enhancing' && '增强中'}
+                            {image.status === 'enhanced' && '✓ 已完成'}
+                            {image.status === 'error' && '失败'}
+                          </span>
+                          <div className="flex gap-1">
+                            {image.enhancedUrl && (
+                              <a
+                                href={`/api/download?url=${encodeURIComponent(image.enhancedUrl)}&filename=enhanced-${index + 1}.jpg`}
+                                className="p-1 text-purple-600 hover:text-purple-700"
+                                title="下载"
+                              >
+                                ⬇️
+                              </a>
                             )}
+                            <button
+                              onClick={() => handleRemoveBatchImage(index)}
+                              className="p-1 text-red-600 hover:text-red-700"
+                              title="删除"
+                            >
+                              ✕
+                            </button>
                           </div>
-                        ))}
+                        </div>
+                        {image.error && (
+                          <div className="text-xs text-red-600 mt-1 break-words">{image.error}</div>
+                        )}
                       </div>
-                    )}
+                    ))}
                   </div>
-                </>
-              )}
+                )}
+              </div>
 
               <div className="grid gap-6 md:grid-cols-2">
                 <div className="space-y-4">
@@ -3740,28 +3715,34 @@ export default function Home() {
 
               <div className="space-y-3">
                 <button
-                  onClick={batchEnhanceMode ? handleBatchEnhance : handleImageEnhanceGenerate}
-                  disabled={imageEnhanceGenerating || (batchEnhanceMode && batchEnhanceImages.filter(img => img.status === 'uploaded').length === 0)}
-                  className={`inline-flex items-center justify-center gap-3 rounded-xl px-6 py-3 font-semibold text-white transition ${
-                    imageEnhanceGenerating || (batchEnhanceMode && batchEnhanceImages.filter(img => img.status === 'uploaded').length === 0)
+                  onClick={handleBatchEnhance}
+                  disabled={imageEnhanceGenerating || batchEnhanceImages.filter(img => img.status === 'uploaded').length === 0}
+                  className={`w-full inline-flex items-center justify-center gap-3 rounded-xl px-6 py-4 text-lg font-bold text-white transition shadow-lg ${
+                    imageEnhanceGenerating || batchEnhanceImages.filter(img => img.status === 'uploaded').length === 0
                       ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400'
+                      : 'bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 hover:shadow-xl'
                   }`}
                 >
-                  <span role="img" aria-hidden="true">⚡</span>
+                  <span role="img" aria-hidden="true" className="text-2xl">⚡</span>
                   {imageEnhanceGenerating ? (
                     <span className="flex items-center gap-2">
-                      <span className="inline-flex h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                      增强中...
+                      <span className="inline-flex h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                      正在增强图片...
                     </span>
                   ) : (
-                    batchEnhanceMode ? `批量增强 (${batchEnhanceImages.filter(img => img.status === 'uploaded').length} 张)` : '开始画质增强'
+                    `开始增强 ${batchEnhanceImages.filter(img => img.status === 'uploaded').length > 0 ? `(${batchEnhanceImages.filter(img => img.status === 'uploaded').length} 张)` : ''}`
                   )}
                 </button>
 
+                {batchEnhanceImages.length === 0 && (
+                  <div className="bg-blue-50 border border-blue-200 text-blue-700 rounded-xl p-4 text-sm">
+                    💡 请先上传图片再进行增强
+                  </div>
+                )}
+
                 {imageEnhanceError && (
                   <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-sm">
-                    {imageEnhanceError}
+                    ❌ {imageEnhanceError}
                   </div>
                 )}
 
@@ -3770,37 +3751,55 @@ export default function Home() {
                     {imageEnhanceStatus}
                   </div>
                 )}
+
+                {/* 处理进度统计 */}
+                {batchEnhanceImages.length > 0 && (
+                  <div className="grid grid-cols-4 gap-3 p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl border border-purple-200">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-gray-700">{batchEnhanceImages.length}</div>
+                      <div className="text-xs text-gray-600">总数</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-green-600">{batchEnhanceImages.filter(img => img.status === 'uploaded').length}</div>
+                      <div className="text-xs text-gray-600">待增强</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-yellow-600">{batchEnhanceImages.filter(img => img.status === 'enhancing').length}</div>
+                      <div className="text-xs text-gray-600">进行中</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-purple-600">{batchEnhanceImages.filter(img => img.status === 'enhanced').length}</div>
+                      <div className="text-xs text-gray-600">已完成</div>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {!batchEnhanceMode && imageEnhanceResultUrl && (
-                <div className="space-y-4">
+              {/* 批量下载按钮 */}
+              {batchEnhanceImages.filter(img => img.status === 'enhanced').length > 0 && (
+                <div className="space-y-4 p-6 bg-gradient-to-r from-purple-50 to-green-50 rounded-xl border border-purple-200">
                   <div className="flex items-center gap-2">
                     <span className="text-2xl">✅</span>
-                    <h3 className="text-xl font-semibold text-gray-800">增强结果</h3>
-                  </div>
-                  <div className="relative w-full h-[500px] bg-gray-100 rounded-2xl overflow-hidden">
-                    <Image
-                      src={imageEnhanceResultUrl}
-                      alt="增强后的图片"
-                      fill
-                      className="object-contain"
-                      unoptimized
-                    />
+                    <h3 className="text-xl font-semibold text-gray-800">
+                      增强完成 ({batchEnhanceImages.filter(img => img.status === 'enhanced').length} / {batchEnhanceImages.length})
+                    </h3>
                   </div>
                   <div className="flex flex-wrap gap-3">
+                    {batchEnhanceImages.filter(img => img.enhancedUrl).length === 1 && (
+                      <a
+                        href={`/api/download?url=${encodeURIComponent(batchEnhanceImages.find(img => img.enhancedUrl)?.enhancedUrl || '')}&filename=enhanced-image.jpg`}
+                        className="inline-flex items-center gap-2 rounded-xl bg-purple-600 text-white px-5 py-2.5 font-semibold shadow hover:bg-purple-500 transition"
+                      >
+                        ⬇️ 下载增强图片
+                      </a>
+                    )}
                     <a
-                      href={`/api/download?url=${encodeURIComponent(imageEnhanceResultUrl)}&filename=image-enhance.jpg`}
-                      className="inline-flex items-center gap-2 rounded-xl bg-purple-600 text-white px-5 py-2.5 font-semibold shadow hover:bg-purple-500 transition"
-                    >
-                      下载增强图片
-                    </a>
-                    <a
-                      href={imageEnhanceResultUrl}
+                      href={batchEnhanceImages.find(img => img.enhancedUrl)?.enhancedUrl || '#'}
                       target="_blank"
                       rel="noreferrer"
                       className="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-5 py-2.5 font-semibold text-gray-700 hover:border-purple-400 transition"
                     >
-                      在新标签页打开
+                      🔗 在新标签页打开
                     </a>
                   </div>
                 </div>
