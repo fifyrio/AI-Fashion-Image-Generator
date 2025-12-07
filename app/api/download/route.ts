@@ -48,9 +48,7 @@ export async function GET(request: NextRequest) {
         status: 200,
         headers: {
           'Content-Type': contentType,
-          'Content-Disposition': `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(
-            filename
-          )}`,
+          'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
           'Cache-Control': 'private, max-age=0, must-revalidate',
         },
       });
@@ -92,9 +90,7 @@ export async function GET(request: NextRequest) {
       headers: {
         'Content-Type': contentType,
         ...(contentLength ? { 'Content-Length': contentLength.toString() } : {}),
-        'Content-Disposition': `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(
-          filename
-        )}`,
+        'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
         'Cache-Control': 'private, max-age=0, must-revalidate',
       },
     });

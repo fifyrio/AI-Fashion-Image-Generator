@@ -130,10 +130,13 @@ export default function Home() {
   const [selectedPoseIndices, setSelectedPoseIndices] = useState<number[]>([]);
   const [modelPoseGenerating, setModelPoseGenerating] = useState(false);
   const [modelPoseDragging, setModelPoseDragging] = useState(false);
-  const [modelPoseGeneratedImages, setModelPoseGeneratedImages] = useState<Array<{poseIndex: number, pose: string, imageUrl: string, status: 'generating' | 'completed' | 'failed', error?: string}>>([]);
+  const [modelPoseGeneratedImages, setModelPoseGeneratedImages] = useState<Array<{poseIndex: number, pose: string, imageUrl: string, enhancedUrl?: string, status: 'generating' | 'completed' | 'enhancing' | 'enhanced' | 'failed', error?: string}>>([]);
   const [modelHoldingPhone, setModelHoldingPhone] = useState(false);
   const [modelWearingMask, setModelWearingMask] = useState(false);
   const [modelPoseUseProModel, setModelPoseUseProModel] = useState(false);
+  const [modelPoseAutoEnhance, setModelPoseAutoEnhance] = useState(true);
+  const [modelPoseEnhanceUpscale, setModelPoseEnhanceUpscale] = useState<ImageEnhanceUpscale>('2x');
+  const [modelPoseEnhanceModel, setModelPoseEnhanceModel] = useState<ImageEnhanceModel>('Low Resolution V2');
 
   // Outfit-Change-V2 tab states - 批量处理
   const [outfitV2OriginalFiles, setOutfitV2OriginalFiles] = useState<File[]>([]);
@@ -1160,6 +1163,93 @@ export default function Home() {
       }
 
       console.log('✅ Batch generation completed:', { successCount, failCount });
+
+      // 如果开启了自动增强，对成功生成的图片进行增强
+      if (modelPoseAutoEnhance && successCount > 0) {
+        console.log('🔄 Starting auto-enhancement for generated images...');
+        setModelPoseError(`批量生成完成，正在自动增强 ${successCount} 张图片...`);
+
+        const successResults = results.filter(r => r.success && r.imageUrl);
+
+        // 批量增强所有成功的图片
+        const enhanceTasks = successResults.map(async (result) => {
+          try {
+            // 更新状态为增强中
+            setModelPoseGeneratedImages(prev =>
+              prev.map(item =>
+                item.poseIndex === result.poseIndex
+                  ? { ...item, status: 'enhancing' as const }
+                  : item
+              )
+            );
+
+            const enhanceResponse = await fetch('/api/enhance-images-batch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                images: [{ imageUrl: result.imageUrl }],
+                enhanceModel: modelPoseEnhanceModel,
+                outputFormat: 'jpg',
+                upscaleFactor: modelPoseEnhanceUpscale,
+                faceEnhancement: false,
+                subjectDetection: 'Foreground',
+                faceEnhancementStrength: 0.5,
+                faceEnhancementCreativity: 0.3
+              })
+            });
+
+            if (!enhanceResponse.ok) {
+              throw new Error('Enhancement failed');
+            }
+
+            const enhanceData = await enhanceResponse.json();
+            const enhanceResult = enhanceData.results?.[0];
+
+            if (enhanceResult?.success && enhanceResult.enhancedUrl) {
+              // 更新增强后的URL
+              setModelPoseGeneratedImages(prev =>
+                prev.map(item =>
+                  item.poseIndex === result.poseIndex
+                    ? { ...item, enhancedUrl: enhanceResult.enhancedUrl, status: 'enhanced' as const }
+                    : item
+                )
+              );
+              console.log(`✅ Enhancement completed for pose ${result.poseIndex}`);
+              return { poseIndex: result.poseIndex, success: true };
+            } else {
+              throw new Error(enhanceResult?.error || 'No enhanced URL returned');
+            }
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Enhancement failed';
+            console.error(`❌ Enhancement failed for pose ${result.poseIndex}:`, errorMessage);
+
+            // 增强失败，但保持completed状态
+            setModelPoseGeneratedImages(prev =>
+              prev.map(item =>
+                item.poseIndex === result.poseIndex
+                  ? { ...item, status: 'completed' as const }
+                  : item
+              )
+            );
+            return { poseIndex: result.poseIndex, success: false };
+          }
+        });
+
+        const enhanceResults = await Promise.all(enhanceTasks);
+        const enhanceSuccessCount = enhanceResults.filter(r => r.success).length;
+        const enhanceFailCount = enhanceResults.filter(r => !r.success).length;
+
+        if (enhanceFailCount > 0) {
+          setModelPoseError(
+            `批量生成完成：${successCount} 个成功，${failCount} 个失败。` +
+            `自动增强：${enhanceSuccessCount} 个成功，${enhanceFailCount} 个失败`
+          );
+        } else {
+          setModelPoseError(`批量生成和增强完成：${enhanceSuccessCount} 张图片已自动增强`);
+        }
+
+        console.log('✅ Auto-enhancement completed:', { enhanceSuccessCount, enhanceFailCount });
+      }
     } catch (error) {
       setModelPoseError(error instanceof Error ? error.message : 'Batch generation failed');
     } finally {
@@ -3074,6 +3164,79 @@ export default function Home() {
                       </label>
                     </div>
 
+                    {/* Auto Enhance Option */}
+                    <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-4 border border-green-200">
+                      <label className="flex items-center cursor-pointer group">
+                        <div className="relative">
+                          <input
+                            type="checkbox"
+                            checked={modelPoseAutoEnhance}
+                            onChange={(e) => setModelPoseAutoEnhance(e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-green-500 peer-focus:ring-4 peer-focus:ring-green-300 transition-all"></div>
+                          <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                        </div>
+                        <div className="ml-3 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">✨</span>
+                            <span className="font-semibold text-gray-800">自动图像增强</span>
+                            <span className="px-2 py-0.5 bg-green-500 text-white text-xs font-bold rounded-full">推荐</span>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-1">
+                            生成完成后自动进行图像增强，提升画质和细节
+                          </p>
+                        </div>
+                      </label>
+
+                      {/* Enhancement Settings */}
+                      {modelPoseAutoEnhance && (
+                        <div className="mt-4 pt-4 border-t border-green-200 space-y-3">
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                              增强模型
+                            </label>
+                            <div className="flex gap-2">
+                              {IMAGE_ENHANCE_MODELS.map((model) => (
+                                <button
+                                  key={model}
+                                  onClick={() => setModelPoseEnhanceModel(model)}
+                                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                                    modelPoseEnhanceModel === model
+                                      ? 'bg-green-500 text-white shadow-md'
+                                      : 'bg-white text-gray-700 hover:bg-green-100 border border-green-200'
+                                  }`}
+                                >
+                                  {model}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                              放大倍数
+                            </label>
+                            <div className="flex gap-2">
+                              {IMAGE_ENHANCE_UPSCALE_OPTIONS.map((scale) => (
+                                <button
+                                  key={scale}
+                                  onClick={() => setModelPoseEnhanceUpscale(scale)}
+                                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                                    modelPoseEnhanceUpscale === scale
+                                      ? 'bg-green-500 text-white shadow-md'
+                                      : 'bg-white text-gray-700 hover:bg-green-100 border border-green-200'
+                                  }`}
+                                >
+                                  {scale}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     {/* Analyze Button */}
                     <button
                       onClick={handleModelPoseAnalyze}
@@ -3194,30 +3357,45 @@ export default function Home() {
                               <h3 className="text-xl font-semibold text-gray-700">生成结果：</h3>
                               <div className="flex gap-2 items-center">
                                 <div className="flex gap-2 text-sm">
+                                  {modelPoseGeneratedImages.filter(img => img.status === 'enhanced').length > 0 && (
+                                    <span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full font-medium flex items-center gap-1">
+                                      <span>✨</span>
+                                      <span>已增强: {modelPoseGeneratedImages.filter(img => img.status === 'enhanced').length}</span>
+                                    </span>
+                                  )}
                                   <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full font-medium">
-                                    成功: {modelPoseGeneratedImages.filter(img => img.status === 'completed').length}
+                                    已生成: {modelPoseGeneratedImages.filter(img => img.status === 'completed').length}
                                   </span>
-                                  <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full font-medium">
-                                    生成中: {modelPoseGeneratedImages.filter(img => img.status === 'generating').length}
-                                  </span>
+                                  {modelPoseGeneratedImages.filter(img => img.status === 'enhancing').length > 0 && (
+                                    <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full font-medium">
+                                      增强中: {modelPoseGeneratedImages.filter(img => img.status === 'enhancing').length}
+                                    </span>
+                                  )}
+                                  {modelPoseGeneratedImages.filter(img => img.status === 'generating').length > 0 && (
+                                    <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full font-medium">
+                                      生成中: {modelPoseGeneratedImages.filter(img => img.status === 'generating').length}
+                                    </span>
+                                  )}
                                   {modelPoseGeneratedImages.filter(img => img.status === 'failed').length > 0 && (
                                     <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full font-medium">
                                       失败: {modelPoseGeneratedImages.filter(img => img.status === 'failed').length}
                                     </span>
                                   )}
                                 </div>
-                                {modelPoseGeneratedImages.filter(img => img.status === 'completed').length > 0 && (
+                                {(modelPoseGeneratedImages.filter(img => img.status === 'completed' || img.status === 'enhanced').length > 0) && (
                                   <div className="flex gap-2">
                                     <button
                                       onClick={async () => {
-                                        const completedImages = modelPoseGeneratedImages.filter(img => img.status === 'completed');
+                                        const completedImages = modelPoseGeneratedImages.filter(img => img.status === 'completed' || img.status === 'enhanced');
                                         const dirName = `${downloadDirPrefix}_${character}`;
                                         for (let i = 0; i < completedImages.length; i++) {
                                           const item = completedImages[i];
                                           try {
+                                            // 优先下载增强后的图片，如果没有则下载原图
+                                            const imageUrl = item.enhancedUrl || item.imageUrl;
                                             // 使用新的文件命名格式: 目录前缀_模特名称_姿势X.png
                                             const filename = `${dirName}_姿势${item.poseIndex + 1}.png`;
-                                            const downloadUrl = `/api/download?url=${encodeURIComponent(item.imageUrl)}&filename=${encodeURIComponent(filename)}`;
+                                            const downloadUrl = `/api/download?url=${encodeURIComponent(imageUrl)}&filename=${encodeURIComponent(filename)}`;
                                             const a = document.createElement('a');
                                             a.href = downloadUrl;
                                             a.download = filename;
@@ -3304,8 +3482,12 @@ export default function Home() {
                                 <div
                                   key={idx}
                                   className={`border-2 rounded-lg p-4 transition-all ${
-                                    item.status === 'completed'
+                                    item.status === 'enhanced'
+                                      ? 'bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-300 shadow-lg'
+                                      : item.status === 'completed'
                                       ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-200'
+                                      : item.status === 'enhancing'
+                                      ? 'bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-300'
                                       : item.status === 'generating'
                                       ? 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200'
                                       : 'bg-gradient-to-br from-red-50 to-pink-50 border-red-200'
@@ -3318,11 +3500,23 @@ export default function Home() {
                                     <div className="flex-1">
                                       <p className="text-xs text-gray-600 line-clamp-2">{item.pose}</p>
                                     </div>
+                                    {item.status === 'enhanced' && (
+                                      <div className="flex-shrink-0 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full px-2 py-1 flex items-center gap-1">
+                                        <span className="text-white text-xs">✨</span>
+                                        <span className="text-white text-xs font-bold">已增强</span>
+                                      </div>
+                                    )}
                                     {item.status === 'completed' && (
                                       <div className="flex-shrink-0 bg-green-500 rounded-full p-1">
                                         <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                                         </svg>
+                                      </div>
+                                    )}
+                                    {item.status === 'enhancing' && (
+                                      <div className="flex items-center gap-1">
+                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                                        <span className="text-xs text-blue-600 font-medium">增强中</span>
                                       </div>
                                     )}
                                     {item.status === 'generating' && (
@@ -3337,15 +3531,39 @@ export default function Home() {
                                     )}
                                   </div>
 
-                                  {item.status === 'completed' && item.imageUrl && (
+                                  {(item.status === 'completed' || item.status === 'enhanced') && item.imageUrl && (
                                     <div className="relative w-full h-64 bg-gray-100 rounded-lg overflow-hidden">
                                       <Image
-                                        src={item.imageUrl}
+                                        src={item.enhancedUrl || item.imageUrl}
                                         alt={`姿势 ${item.poseIndex + 1}`}
                                         fill
                                         className="object-contain"
                                         unoptimized
                                       />
+                                      {item.status === 'enhanced' && (
+                                        <div className="absolute top-2 right-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-2 py-1 rounded-full text-xs font-bold shadow-lg flex items-center gap-1">
+                                          <span>✨</span>
+                                          <span>增强版</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {item.status === 'enhancing' && item.imageUrl && (
+                                    <div className="relative w-full h-64 bg-gray-100 rounded-lg overflow-hidden">
+                                      <Image
+                                        src={item.imageUrl}
+                                        alt={`姿势 ${item.poseIndex + 1}`}
+                                        fill
+                                        className="object-contain opacity-60"
+                                        unoptimized
+                                      />
+                                      <div className="absolute inset-0 flex items-center justify-center bg-blue-500/20 backdrop-blur-sm">
+                                        <div className="text-center bg-white/90 rounded-lg p-4 shadow-lg">
+                                          <div className="animate-spin rounded-full h-10 w-10 border-b-3 border-blue-500 mx-auto mb-2"></div>
+                                          <p className="text-blue-600 font-medium text-sm">正在增强画质...</p>
+                                        </div>
+                                      </div>
                                     </div>
                                   )}
 
