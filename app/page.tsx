@@ -5014,7 +5014,7 @@ export default function Home() {
                   <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-6 border border-green-200">
                     <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                       <span className="text-2xl">🎯</span>
-                      <span>生成的类似文案：</span>
+                      <span>生成文案：</span>
                     </h3>
                     <div className="space-y-4">
                       {copywritingResults[0].copywriting.map((copy, index) => (

@@ -501,7 +501,8 @@ export class KIEImageService {
 
             // 构建提示词
             let poseWithExtras = pose;
-            if (holdingPhone) {
+            // 如果戴口罩，则不添加举手机的描述
+            if (holdingPhone && !wearingMask) {
                 poseWithExtras = `${poseWithExtras}，模特一只手举着手机`;
             }
             if (wearingMask) {

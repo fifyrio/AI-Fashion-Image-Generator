@@ -165,6 +165,13 @@ ${originalCopy}
 
 **文案输出格式示例（必须严格遵守）**：
 
+⚠️ **重要格式要求**：
+- **绝对不要使用任何Markdown格式符号**（如 ** __ # 等用于加粗/斜体/标题的符号）
+- **不要使用"标题："、"场景："、"专业分析："这样的结构化标签**
+- 文案要纯文本输出，方便用户直接复制到小红书
+- 只在hashtag部分使用 # 符号
+- 文案内容要自然流畅，不要刻意分段标注
+
 【类似文案1】（爆款公式完整版）
 姐妹们，这套真的太绝了！昨天穿去公司，同事都问我哪买的。上衣是那种修身的西装款，肩线设计特别好，显肩窄还提气质，面料是加厚的，完全不用担心透。裙子是高腰A字版型，完美遮住小肚子，还特别显腿长，简直就是梨型身材的福音！喜欢的姐妹们千万别错过了！
 
@@ -225,6 +232,24 @@ ${audienceGuidelines}
 
     console.log('[generate-similar-copywriting] Raw response:', content);
 
+    // 清理Markdown格式符号的函数
+    const cleanMarkdownFormat = (text: string): string => {
+      return text
+        // 移除加粗符号 **text** 但保留文本
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        // 移除斜体符号 *text* 但保留文本
+        .replace(/\*([^*]+)\*/g, '$1')
+        // 移除下划线加粗 __text__ 但保留文本
+        .replace(/__([^_]+)__/g, '$1')
+        // 移除下划线斜体 _text_ 但保留文本
+        .replace(/_([^_]+)_/g, '$1')
+        // 移除结构化标签（如"标题："、"场景："、"专业分析："等）
+        .replace(/^(标题|场景|专业分析|痛点解决|行动号召)[:：]\s*/gm, '')
+        // 移除多余的空行（保留一个空行用于段落分隔）
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+    };
+
     // 解析响应内容
     const analysisMatch = content.match(/【爆款分析】\s*([\s\S]*?)(?=【类似文案1】)/);
     const copy1Match = content.match(/【类似文案1】\s*([\s\S]*?)(?=【类似文案2】)/);
@@ -233,16 +258,16 @@ ${audienceGuidelines}
 
     const analysis = analysisMatch ? analysisMatch[1].trim() : '分析内容解析失败';
     const similarCopywriting = [
-      copy1Match ? copy1Match[1].trim() : '',
-      copy2Match ? copy2Match[1].trim() : '',
-      copy3Match ? copy3Match[1].trim() : ''
+      copy1Match ? cleanMarkdownFormat(copy1Match[1].trim()) : '',
+      copy2Match ? cleanMarkdownFormat(copy2Match[1].trim()) : '',
+      copy3Match ? cleanMarkdownFormat(copy3Match[1].trim()) : ''
     ].filter(Boolean);
 
     if (similarCopywriting.length === 0) {
       // 如果解析失败，尝试简单分割
       const parts = content.split(/【类似文案\d】/).filter(Boolean);
       if (parts.length >= 2) {
-        similarCopywriting.push(...parts.slice(1, 4).map((p: string) => p.trim()));
+        similarCopywriting.push(...parts.slice(1, 4).map((p: string) => cleanMarkdownFormat(p.trim())));
       }
     }
 
