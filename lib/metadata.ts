@@ -49,7 +49,8 @@ export async function addIPhone13Metadata(
     const longitude = 118 + 48/60 + 55.272/3600; // 118.815353
 
     // 创建 EXIF 数据
-    const exifObj: piexif.IExif = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const exifObj: Record<string, any> = {
       '0th': {
         [piexif.ImageIFD.Make]: 'Apple',
         [piexif.ImageIFD.Model]: 'iPhone 13',

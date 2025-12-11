@@ -579,22 +579,16 @@ export class AIService {
 
                 const result = JSON.parse(jsonStr);
 
-                // Ensure sceneDescription and poseDescription are strings
-                // If they are objects, convert them to formatted strings
+                // Ensure sceneDescription is a string
+                // If it is an object, convert it to a formatted string
                 let sceneDescription = result.sceneDescription;
-                let poseDescription = result.poseDescription;
 
                 if (typeof sceneDescription === 'object' && sceneDescription !== null) {
                     sceneDescription = JSON.stringify(sceneDescription, null, 2);
                 }
 
-                if (typeof poseDescription === 'object' && poseDescription !== null) {
-                    poseDescription = JSON.stringify(poseDescription, null, 2);
-                }
-
                 return {
-                    sceneDescription: String(sceneDescription || ''),
-                    poseDescription: String(poseDescription || '')
+                    sceneDescription: String(sceneDescription || '')
                 };
             }
 

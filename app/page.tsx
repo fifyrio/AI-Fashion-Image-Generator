@@ -4785,7 +4785,7 @@ export default function Home() {
 
                     <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                       <p className="text-sm text-blue-800 text-center">
-                        ✅ 场景分析完成！点击下方"上传图片生成"按钮，可以将模特放到此场景中（保持模特原有姿势和身材）
+                        ✅ 场景分析完成！点击下方&quot;上传图片生成&quot;按钮，可以将模特放到此场景中（保持模特原有姿势和身材）
                       </p>
                     </div>
                   </div>
