@@ -72,7 +72,7 @@ const IMAGE_ENHANCE_UPSCALE_OPTIONS = ['2x', '4x', '6x'] as const;
 type ImageEnhanceModel = (typeof IMAGE_ENHANCE_MODELS)[number];
 type ImageEnhanceUpscale = (typeof IMAGE_ENHANCE_UPSCALE_OPTIONS)[number];
 
-type TabType = 'outfit-change' | 'scene-pose' | 'model-pose' | 'model-generation' | 'image-enhance' | 'outfit-change-v2' | 'mimic-reference' | 'copywriting';
+type TabType = 'outfit-change' | 'scene-pose' | 'model-pose' | 'model-generation' | 'image-enhance' | 'outfit-change-v2' | 'mimic-reference' | 'copywriting' | 'pants-closeup';
 
 interface ScenePoseSuggestion {
   scene: string;
@@ -209,6 +209,16 @@ export default function Home() {
     copywriting: string[];
   }> | null>(null);
   const [copywritingError, setCopywritingError] = useState<string>('');
+
+  // Pants Closeup tab states (简化版)
+  const [pantsCloseupFile, setPantsCloseupFile] = useState<File | null>(null);
+  const [pantsCloseupPreview, setPantsCloseupPreview] = useState<string>('');
+  const [pantsCloseupUploadedUrl, setPantsCloseupUploadedUrl] = useState<string>('');
+  const [pantsCloseupAngle, setPantsCloseupAngle] = useState<'sitting' | 'overhead'>('sitting'); // 新增：角度选择
+  const [pantsCloseupGenerating, setPantsCloseupGenerating] = useState(false);
+  const [pantsCloseupGeneratedImage, setPantsCloseupGeneratedImage] = useState<string | null>(null);
+  const [pantsCloseupError, setPantsCloseupError] = useState<string>('');
+  const [pantsCloseupIsDragging, setPantsCloseupIsDragging] = useState(false);
 
   // Model generation tab states
   const [modelGenerationGender, setModelGenerationGender] = useState<ModelGender>('female');
@@ -1927,6 +1937,133 @@ export default function Home() {
     }
   };
 
+  // Pants Closeup handlers
+  const handlePantsCloseupFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setPantsCloseupFile(file);
+      setPantsCloseupPreview(URL.createObjectURL(file));
+      setPantsCloseupError('');
+      setPantsCloseupGeneratedImage(null);
+    }
+  };
+
+  const handlePantsCloseupDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setPantsCloseupIsDragging(true);
+  };
+
+  const handlePantsCloseupDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setPantsCloseupIsDragging(false);
+  };
+
+  const handlePantsCloseupDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setPantsCloseupIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      setPantsCloseupFile(file);
+      setPantsCloseupPreview(URL.createObjectURL(file));
+      setPantsCloseupError('');
+      setPantsCloseupGeneratedImage(null);
+    }
+  };
+
+  // 简化后的生成函数：上传 + 直接生成
+  const handlePantsCloseupGenerate = async () => {
+    if (!pantsCloseupFile) {
+      setPantsCloseupError('请先上传图片');
+      return;
+    }
+
+    setPantsCloseupGenerating(true);
+    setPantsCloseupError('');
+
+    try {
+      // 1. 上传图片到 R2（如果还没上传）
+      let imageUrl = pantsCloseupUploadedUrl;
+      if (!imageUrl) {
+        const formData = new FormData();
+        formData.append('files', pantsCloseupFile);
+
+        const uploadResponse = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error('上传图片失败');
+        }
+
+        const uploadData = await uploadResponse.json();
+        if (!uploadData.uploaded || uploadData.uploaded.length === 0) {
+          throw new Error('上传失败，未返回图片URL');
+        }
+        imageUrl = uploadData.uploaded[0].url;
+        setPantsCloseupUploadedUrl(imageUrl);
+        console.log('[pants-closeup] Uploaded URL:', imageUrl);
+      }
+
+      // 2. 直接创建生成任务（不需要分析步骤）
+      const response = await fetch('/api/generate-pants-closeup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageUrl: imageUrl,
+          angle: pantsCloseupAngle, // 传递角度选择
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || '生成失败');
+      }
+
+      const data = await response.json();
+      if (!data.taskId) {
+        throw new Error('任务创建失败，请稍后重试');
+      }
+
+      console.log('Task created:', data.taskId);
+
+      // 3. 轮询任务状态
+      const maxAttempts = 40;
+      const pollInterval = 5000;
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+        const statusResponse = await fetch(`/api/task-status?taskId=${data.taskId}`);
+
+        if (!statusResponse.ok) {
+          console.warn('Failed to fetch task status, retrying...');
+          continue;
+        }
+
+        const statusData = await statusResponse.json();
+        console.log(`Task status (attempt ${attempt + 1}):`, statusData.status);
+
+        if (statusData.status === 'completed' && statusData.resultUrls?.[0]) {
+          setPantsCloseupGeneratedImage(statusData.resultUrls[0]);
+          console.log('✅ Generation completed:', statusData.resultUrls[0]);
+          return;
+        }
+
+        if (statusData.status === 'failed') {
+          throw new Error('生成任务失败');
+        }
+      }
+
+      throw new Error('生成超时，请稍后重试');
+    } catch (error) {
+      console.error('生成裤子特写失败:', error);
+      setPantsCloseupError(error instanceof Error ? error.message : '生成失败，请重试');
+    } finally {
+      setPantsCloseupGenerating(false);
+    }
+  };
+
   const handleModelGenerationGenderChange = (gender: ModelGender) => {
     if (gender === modelGenerationGender) {
       return;
@@ -2351,6 +2488,19 @@ export default function Home() {
               <div className="flex items-center justify-center gap-2">
                 <span className="text-xl">✍️</span>
                 <span>生成类似文案</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('pants-closeup')}
+              className={`flex-1 px-6 py-4 text-lg font-semibold transition-all ${
+                activeTab === 'pants-closeup'
+                  ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-xl">👖</span>
+                <span>裤子特写</span>
               </div>
             </button>
           </div>
@@ -5060,6 +5210,196 @@ export default function Home() {
                   <li>AI 会生成 3 个风格相似的文案，每个文案都包含相关的 hashtag</li>
                   <li>点击&ldquo;复制文案&rdquo;按钮即可快速复制到剪贴板使用</li>
                 </ol>
+              </div>
+            </div>
+          )}
+
+          {/* Pants Closeup Tab Content */}
+          {activeTab === 'pants-closeup' && (
+            <div className="space-y-6">
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-200">
+                <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  <span className="text-3xl">👖</span>
+                  <span>裤子特写镜头生成</span>
+                </h2>
+                <p className="text-gray-600">
+                  上传一张图片，选择拍摄角度，AI 将生成第一人称视角的特写镜头照片。
+                </p>
+              </div>
+
+              {/* Upload Area */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-700">1. 上传图片</h3>
+                <div
+                  onDragOver={handlePantsCloseupDragOver}
+                  onDragLeave={handlePantsCloseupDragLeave}
+                  onDrop={handlePantsCloseupDrop}
+                  className={`relative border-2 border-dashed rounded-lg p-8 transition-all ${
+                    pantsCloseupIsDragging
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-300 hover:border-blue-400 bg-gray-50'
+                  }`}
+                >
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePantsCloseupFileSelect}
+                    className="hidden"
+                    id="pants-closeup-file-input"
+                  />
+                  <label
+                    htmlFor="pants-closeup-file-input"
+                    className="flex flex-col items-center justify-center cursor-pointer"
+                  >
+                    <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                      <span className="text-3xl">📁</span>
+                    </div>
+                    <p className="text-lg font-medium text-gray-700 mb-2">
+                      点击上传或拖拽图片到这里
+                    </p>
+                    <p className="text-sm text-gray-500">支持 JPG、PNG 格式</p>
+                  </label>
+                </div>
+
+                {/* Preview */}
+                {pantsCloseupPreview && (
+                  <div className="relative rounded-lg overflow-hidden border-2 border-gray-200">
+                    <Image
+                      src={pantsCloseupPreview}
+                      alt="Pants preview"
+                      width={400}
+                      height={600}
+                      className="w-full h-auto object-contain"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Angle Selection */}
+              {pantsCloseupFile && (
+                <div className="space-y-3">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    选择拍摄角度：
+                  </label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <button
+                      onClick={() => setPantsCloseupAngle('sitting')}
+                      className={`p-4 rounded-lg border-2 transition-all ${
+                        pantsCloseupAngle === 'sitting'
+                          ? 'border-purple-600 bg-purple-50 text-purple-700'
+                          : 'border-gray-200 bg-white text-gray-700 hover:border-purple-300'
+                      }`}
+                    >
+                      <div className="text-2xl mb-2">🪑</div>
+                      <div className="font-semibold">坐姿角度</div>
+                      <div className="text-xs mt-1 opacity-75">从坐姿俯视视角</div>
+                    </button>
+                    <button
+                      onClick={() => setPantsCloseupAngle('overhead')}
+                      className={`p-4 rounded-lg border-2 transition-all ${
+                        pantsCloseupAngle === 'overhead'
+                          ? 'border-purple-600 bg-purple-50 text-purple-700'
+                          : 'border-gray-200 bg-white text-gray-700 hover:border-purple-300'
+                      }`}
+                    >
+                      <div className="text-2xl mb-2">👀</div>
+                      <div className="font-semibold">俯视角度</div>
+                      <div className="text-xs mt-1 opacity-75">从站立俯视视角</div>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Error Message */}
+              {pantsCloseupError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <p className="text-red-600 font-medium">{pantsCloseupError}</p>
+                </div>
+              )}
+
+              {/* Generate Button */}
+              {pantsCloseupFile && !pantsCloseupGeneratedImage && (
+                <button
+                  onClick={handlePantsCloseupGenerate}
+                  disabled={pantsCloseupGenerating}
+                  className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100 shadow-lg"
+                >
+                  {pantsCloseupGenerating ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></span>
+                      AI 正在生成特写镜头...
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="text-xl">✨</span>
+                      生成特写镜头
+                    </span>
+                  )}
+                </button>
+              )}
+
+              {/* Generated Image */}
+              {pantsCloseupGeneratedImage && (
+                <div className="space-y-4">
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-6 border border-purple-200">
+                    <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                      <span className="text-2xl">🎨</span>
+                      <span>生成结果：</span>
+                    </h3>
+                    <div className="relative rounded-lg overflow-hidden border-2 border-purple-300">
+                      <Image
+                        src={pantsCloseupGeneratedImage}
+                        alt="Generated pants closeup"
+                        width={600}
+                        height={900}
+                        className="w-full h-auto object-contain"
+                      />
+                    </div>
+                    <div className="mt-4 flex gap-3">
+                      <a
+                        href={`/api/download?url=${encodeURIComponent(pantsCloseupGeneratedImage)}&filename=pants-closeup.png`}
+                        download
+                        className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-3 px-6 rounded-lg transition-all text-center"
+                      >
+                        <span className="flex items-center justify-center gap-2">
+                          <span className="text-xl">💾</span>
+                          下载图片
+                        </span>
+                      </a>
+                      <button
+                        onClick={() => {
+                          setPantsCloseupFile(null);
+                          setPantsCloseupPreview('');
+                          setPantsCloseupAnalysis(null);
+                          setPantsCloseupGeneratedImage(null);
+                          setPantsCloseupError('');
+                        }}
+                        className="flex-1 bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-all"
+                      >
+                        <span className="flex items-center justify-center gap-2">
+                          <span className="text-xl">🔄</span>
+                          重新开始
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Usage Instructions */}
+              <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">📖 使用说明：</h3>
+                <ol className="list-decimal list-inside space-y-2 text-gray-600">
+                  <li>上传一张图片（建议使用包含裤子的清晰照片）</li>
+                  <li>选择拍摄角度：坐姿角度（腿部交叉坐姿）或俯视角度（站立俯视）</li>
+                  <li>点击&ldquo;生成特写镜头&rdquo;按钮，AI 将生成第一人称视角的特写照片</li>
+                  <li>生成完成后，可以下载图片或重新开始</li>
+                </ol>
+                <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-sm text-blue-800">
+                    <strong>💡 提示：</strong>不同角度呈现不同效果 - 坐姿角度展示交叉双腿的优雅姿态，俯视角度展示站立时的完整下半身视角。
+                  </p>
+                </div>
               </div>
             </div>
           )}
