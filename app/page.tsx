@@ -72,7 +72,7 @@ const IMAGE_ENHANCE_UPSCALE_OPTIONS = ['2x', '4x', '6x'] as const;
 type ImageEnhanceModel = (typeof IMAGE_ENHANCE_MODELS)[number];
 type ImageEnhanceUpscale = (typeof IMAGE_ENHANCE_UPSCALE_OPTIONS)[number];
 
-type TabType = 'outfit-change' | 'scene-pose' | 'model-pose' | 'model-generation' | 'image-enhance' | 'outfit-change-v2' | 'mimic-reference' | 'copywriting' | 'pants-closeup';
+type TabType = 'outfit-change' | 'scene-pose' | 'model-pose' | 'model-generation' | 'image-enhance' | 'outfit-change-v2' | 'mimic-reference' | 'copywriting' | 'pants-closeup' | 'anime-cover';
 
 interface ScenePoseSuggestion {
   scene: string;
@@ -219,6 +219,16 @@ export default function Home() {
   const [pantsCloseupGeneratedImage, setPantsCloseupGeneratedImage] = useState<string | null>(null);
   const [pantsCloseupError, setPantsCloseupError] = useState<string>('');
   const [pantsCloseupIsDragging, setPantsCloseupIsDragging] = useState(false);
+
+  // Anime Cover tab states
+  const [animeCoverFile, setAnimeCoverFile] = useState<File | null>(null);
+  const [animeCoverPreview, setAnimeCoverPreview] = useState<string>('');
+  const [animeCoverUploadedUrl, setAnimeCoverUploadedUrl] = useState<string>('');
+  const [animeCoverTitle, setAnimeCoverTitle] = useState<string>('');
+  const [animeCoverGenerating, setAnimeCoverGenerating] = useState(false);
+  const [animeCoverGeneratedImage, setAnimeCoverGeneratedImage] = useState<string | null>(null);
+  const [animeCoverError, setAnimeCoverError] = useState<string>('');
+  const [animeCoverIsDragging, setAnimeCoverIsDragging] = useState(false);
 
   // Model generation tab states
   const [modelGenerationGender, setModelGenerationGender] = useState<ModelGender>('female');
@@ -1938,6 +1948,137 @@ export default function Home() {
   };
 
   // Pants Closeup handlers
+  // Anime Cover tab event handlers
+  const handleAnimeCoverFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setAnimeCoverFile(file);
+      setAnimeCoverPreview(URL.createObjectURL(file));
+      setAnimeCoverError('');
+      setAnimeCoverGeneratedImage(null);
+    }
+  };
+
+  const handleAnimeCoverDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setAnimeCoverIsDragging(true);
+  };
+
+  const handleAnimeCoverDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setAnimeCoverIsDragging(false);
+  };
+
+  const handleAnimeCoverDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setAnimeCoverIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      setAnimeCoverFile(file);
+      setAnimeCoverPreview(URL.createObjectURL(file));
+      setAnimeCoverError('');
+      setAnimeCoverGeneratedImage(null);
+    }
+  };
+
+  const handleAnimeCoverGenerate = async () => {
+    if (!animeCoverFile) {
+      setAnimeCoverError('请先上传图片');
+      return;
+    }
+
+    if (!animeCoverTitle.trim()) {
+      setAnimeCoverError('请输入封面标题');
+      return;
+    }
+
+    setAnimeCoverGenerating(true);
+    setAnimeCoverError('');
+
+    try {
+      // 1. 上传图片到 R2
+      let imageUrl = animeCoverUploadedUrl;
+      if (!imageUrl) {
+        const formData = new FormData();
+        formData.append('files', animeCoverFile);
+
+        const uploadResponse = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error('上传图片失败');
+        }
+
+        const uploadData = await uploadResponse.json();
+        if (!uploadData.uploaded || uploadData.uploaded.length === 0) {
+          throw new Error('上传失败，未返回图片URL');
+        }
+        imageUrl = uploadData.uploaded[0].url;
+        setAnimeCoverUploadedUrl(imageUrl);
+        console.log('[anime-cover] Uploaded URL:', imageUrl);
+      }
+
+      // 2. 创建生成任务
+      const response = await fetch('/api/generate-anime-cover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageUrl: imageUrl,
+          title: animeCoverTitle.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || '生成失败');
+      }
+
+      const data = await response.json();
+      if (!data.taskId) {
+        throw new Error('任务创建失败，请稍后重试');
+      }
+
+      console.log('Anime cover task created:', data.taskId);
+
+      // 3. 轮询任务状态
+      const maxAttempts = 40;
+      const pollInterval = 5000;
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+        const statusResponse = await fetch(`/api/task-status?taskId=${data.taskId}`);
+
+        if (!statusResponse.ok) {
+          console.warn('Failed to fetch task status, retrying...');
+          continue;
+        }
+
+        const statusData = await statusResponse.json();
+        console.log(`Anime cover task status (attempt ${attempt + 1}):`, statusData.status);
+
+        if (statusData.status === 'completed' && statusData.resultUrls?.[0]) {
+          setAnimeCoverGeneratedImage(statusData.resultUrls[0]);
+          console.log('✅ Anime cover generation completed:', statusData.resultUrls[0]);
+          return;
+        }
+
+        if (statusData.status === 'failed') {
+          throw new Error('生成任务失败');
+        }
+      }
+
+      throw new Error('生成超时，请稍后重试');
+    } catch (error) {
+      console.error('生成动漫封面失败:', error);
+      setAnimeCoverError(error instanceof Error ? error.message : '生成失败，请重试');
+    } finally {
+      setAnimeCoverGenerating(false);
+    }
+  };
+
   const handlePantsCloseupFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -2414,93 +2555,106 @@ export default function Home() {
           <div className="flex border-b border-gray-200">
             <button
               onClick={() => setActiveTab('model-generation')}
-              className={`flex-1 px-6 py-4 text-lg font-semibold transition-all ${
+              className={`flex-1 px-4 py-3 text-sm font-semibold transition-all ${
                 activeTab === 'model-generation'
                   ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
                   : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
               }`}
             >
               <div className="flex items-center justify-center gap-2">
-                <span className="text-xl">🧍</span>
+                <span className="text-lg">🧍</span>
                 <span>模特生成</span>
               </div>
             </button>
             <button
               onClick={() => setActiveTab('outfit-change-v2')}
-              className={`flex-1 px-6 py-4 text-lg font-semibold transition-all ${
+              className={`flex-1 px-4 py-3 text-sm font-semibold transition-all ${
                 activeTab === 'outfit-change-v2'
                   ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
                   : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
               }`}
             >
               <div className="flex items-center justify-center gap-2">
-                <span className="text-xl">✨</span>
+                <span className="text-lg">✨</span>
                 <span>模特换装V2</span>
               </div>
             </button>
             <button
               onClick={() => setActiveTab('model-pose')}
-              className={`flex-1 px-6 py-4 text-lg font-semibold transition-all ${
+              className={`flex-1 px-4 py-3 text-sm font-semibold transition-all ${
                 activeTab === 'model-pose'
                   ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
                   : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
               }`}
             >
               <div className="flex items-center justify-center gap-2">
-                <span className="text-xl">💃</span>
+                <span className="text-lg">💃</span>
                 <span>生成模特姿势</span>
               </div>
             </button>
             <button
               onClick={() => setActiveTab('image-enhance')}
-              className={`flex-1 px-6 py-4 text-lg font-semibold transition-all ${
+              className={`flex-1 px-4 py-3 text-sm font-semibold transition-all ${
                 activeTab === 'image-enhance'
                   ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
                   : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
               }`}
             >
               <div className="flex items-center justify-center gap-2">
-                <span className="text-xl">🪄</span>
+                <span className="text-lg">🪄</span>
                 <span>图像画质增强</span>
               </div>
             </button>
             <button
               onClick={() => setActiveTab('mimic-reference')}
-              className={`flex-1 px-6 py-4 text-lg font-semibold transition-all ${
+              className={`flex-1 px-4 py-3 text-sm font-semibold transition-all ${
                 activeTab === 'mimic-reference'
                   ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
                   : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
               }`}
             >
               <div className="flex items-center justify-center gap-2">
-                <span className="text-xl">📸</span>
+                <span className="text-lg">📸</span>
                 <span>模仿参考图片</span>
               </div>
             </button>
             <button
               onClick={() => setActiveTab('copywriting')}
-              className={`flex-1 px-6 py-4 text-lg font-semibold transition-all ${
+              className={`flex-1 px-4 py-3 text-sm font-semibold transition-all ${
                 activeTab === 'copywriting'
                   ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
                   : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
               }`}
             >
               <div className="flex items-center justify-center gap-2">
-                <span className="text-xl">✍️</span>
+                <span className="text-lg">✍️</span>
                 <span>生成类似文案</span>
               </div>
             </button>
             <button
               onClick={() => setActiveTab('pants-closeup')}
-              className={`flex-1 px-6 py-4 text-lg font-semibold transition-all ${
+              className={`flex-1 px-4 py-3 text-sm font-semibold transition-all ${
                 activeTab === 'pants-closeup'
                   ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
                   : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
               }`}
             >
               <div className="flex items-center justify-center gap-2">
-                <span className="text-xl">👖</span>
+                <span className="text-lg">👖</span>
                 <span>裤子特写</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('anime-cover')}
+              className={`flex-1 px-4 py-3 text-sm font-semibold transition-all ${
+                activeTab === 'anime-cover'
+                  ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-lg">📚</span>
+                <span>生成动漫封面</span>
               </div>
             </button>
           </div>
@@ -5370,7 +5524,6 @@ export default function Home() {
                         onClick={() => {
                           setPantsCloseupFile(null);
                           setPantsCloseupPreview('');
-                          setPantsCloseupAnalysis(null);
                           setPantsCloseupGeneratedImage(null);
                           setPantsCloseupError('');
                         }}
@@ -5398,6 +5551,176 @@ export default function Home() {
                 <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
                   <p className="text-sm text-blue-800">
                     <strong>💡 提示：</strong>不同角度呈现不同效果 - 坐姿角度展示交叉双腿的优雅姿态，俯视角度展示站立时的完整下半身视角。
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'anime-cover' && (
+            <div className="space-y-6">
+              <div className="bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg p-6 border border-pink-200">
+                <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  <span className="text-3xl">📚</span>
+                  <span>生成动漫封面</span>
+                </h2>
+                <p className="text-gray-600">
+                  上传一张图片，输入标题文案，AI 将生成一个动漫风格的封面图。模特动作不变（一定要举着手机挡着脸），显示全身照，图片最上面显示文案。
+                </p>
+              </div>
+
+              {/* Upload Area */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-700">1. 上传图片</h3>
+                <div
+                  onDragOver={handleAnimeCoverDragOver}
+                  onDragLeave={handleAnimeCoverDragLeave}
+                  onDrop={handleAnimeCoverDrop}
+                  className={`relative border-2 border-dashed rounded-lg p-8 transition-all ${
+                    animeCoverIsDragging
+                      ? 'border-pink-500 bg-pink-50'
+                      : 'border-gray-300 hover:border-pink-400 bg-gray-50'
+                  }`}
+                >
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAnimeCoverFileSelect}
+                    className="hidden"
+                    id="anime-cover-file-input"
+                  />
+                  <label
+                    htmlFor="anime-cover-file-input"
+                    className="flex flex-col items-center justify-center cursor-pointer"
+                  >
+                    <div className="w-16 h-16 bg-pink-100 rounded-full flex items-center justify-center mb-4">
+                      <span className="text-3xl">📁</span>
+                    </div>
+                    <p className="text-lg font-medium text-gray-700 mb-2">
+                      点击上传或拖拽图片到这里
+                    </p>
+                    <p className="text-sm text-gray-500">支持 JPG、PNG 格式</p>
+                  </label>
+                </div>
+
+                {/* Preview */}
+                {animeCoverPreview && (
+                  <div className="relative rounded-lg overflow-hidden border-2 border-gray-200">
+                    <Image
+                      src={animeCoverPreview}
+                      alt="Anime cover preview"
+                      width={400}
+                      height={600}
+                      className="w-full h-auto object-contain"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Title Input */}
+              {animeCoverFile && (
+                <div className="space-y-3">
+                  <label className="block text-lg font-semibold text-gray-700">
+                    2. 输入封面标题
+                  </label>
+                  <input
+                    type="text"
+                    value={animeCoverTitle}
+                    onChange={(e) => setAnimeCoverTitle(e.target.value)}
+                    placeholder="请输入要在封面上显示的文案标题..."
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:outline-none text-gray-700 text-lg"
+                  />
+                </div>
+              )}
+
+              {/* Error Message */}
+              {animeCoverError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <p className="text-red-600 font-medium">{animeCoverError}</p>
+                </div>
+              )}
+
+              {/* Generate Button */}
+              {animeCoverFile && animeCoverTitle && !animeCoverGeneratedImage && (
+                <button
+                  onClick={handleAnimeCoverGenerate}
+                  disabled={animeCoverGenerating}
+                  className="w-full bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100 shadow-lg"
+                >
+                  {animeCoverGenerating ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></span>
+                      AI 正在生成动漫封面...
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="text-xl">✨</span>
+                      生成动漫封面
+                    </span>
+                  )}
+                </button>
+              )}
+
+              {/* Generated Image */}
+              {animeCoverGeneratedImage && (
+                <div className="space-y-4">
+                  <div className="bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg p-6 border border-pink-200">
+                    <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                      <span className="text-2xl">🎨</span>
+                      <span>生成结果：</span>
+                    </h3>
+                    <div className="relative rounded-lg overflow-hidden border-2 border-pink-300">
+                      <Image
+                        src={animeCoverGeneratedImage}
+                        alt="Generated anime cover"
+                        width={600}
+                        height={900}
+                        className="w-full h-auto object-contain"
+                      />
+                    </div>
+                    <div className="mt-4 flex gap-3">
+                      <a
+                        href={`/api/download?url=${encodeURIComponent(animeCoverGeneratedImage)}&filename=anime-cover.png`}
+                        download
+                        className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-3 px-6 rounded-lg transition-all text-center"
+                      >
+                        <span className="flex items-center justify-center gap-2">
+                          <span className="text-xl">💾</span>
+                          下载图片
+                        </span>
+                      </a>
+                      <button
+                        onClick={() => {
+                          setAnimeCoverFile(null);
+                          setAnimeCoverPreview('');
+                          setAnimeCoverTitle('');
+                          setAnimeCoverGeneratedImage(null);
+                          setAnimeCoverError('');
+                        }}
+                        className="flex-1 bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-all"
+                      >
+                        <span className="flex items-center justify-center gap-2">
+                          <span className="text-xl">🔄</span>
+                          重新开始
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Usage Instructions */}
+              <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">📖 使用说明：</h3>
+                <ol className="list-decimal list-inside space-y-2 text-gray-600">
+                  <li>上传一张图片（建议使用模特举着手机挡脸的照片）</li>
+                  <li>输入要在封面上显示的文案标题</li>
+                  <li>点击&ldquo;生成动漫封面&rdquo;按钮，AI 将生成动漫风格的封面</li>
+                  <li>生成完成后，可以下载图片或重新开始</li>
+                </ol>
+                <div className="mt-4 p-4 bg-pink-50 rounded-lg border border-pink-200">
+                  <p className="text-sm text-pink-800">
+                    <strong>💡 提示：</strong>生成的图片将采用柔和的动漫风格，保持模特动作不变，并在图片顶部显示您输入的文案标题。
                   </p>
                 </div>
               </div>

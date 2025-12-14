@@ -713,3 +713,18 @@ export const GPT_ANALYZE_PANTS_PROMPT = `请详细分析图片中的裤子，提
 - 颜色判断要准确！深色和浅色不要搞混
 - 只关注裤子，忽略人物其他特征
 - 必须严格按JSON格式输出，方便程序解析`;
+
+// 动漫封面图生成提示词模板（用于 nano-banana-pro）
+export const ANIME_COVER_PROMPT = (title: string) => `将上传的图片换成下面的效果, 生成一个漫画，模特的动作不变（一定要举着手机挡着脸）, 显示全身照,图片最上面显示文案:${title}
+
+Soft pastel color palette.
+
+Clean anime line work, thin outlines, almost watercolor-like softness.
+
+Shading is gentle, almost airbrushed, with subtle gradients.
+
+The eyes should be large, glossy, and expressive with shades of brown and soft pink around the lower lash line.
+
+Hair should flow naturally with smooth gradient shading and subtle shine.
+
+Overall mood: sweet, youthful, winter-holiday atmosphere.`;
