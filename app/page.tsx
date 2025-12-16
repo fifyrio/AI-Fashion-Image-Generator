@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import type { UploadedReference } from '@/lib/types';
 import type { GeneratedImageSummary } from '@/lib/pipeline';
+import JSZip from 'jszip';
 
 interface CharacterOption {
   id: string;
@@ -1214,22 +1215,20 @@ export default function Home() {
               )
             );
 
-            // Step 1: Download the generated image
-            const imageResponse = await fetch(result.imageUrl);
-            if (!imageResponse.ok) {
-              throw new Error('Failed to download image');
-            }
-            const imageBlob = await imageResponse.blob();
-            const imageFile = new File([imageBlob], `pose_${result.poseIndex}.jpg`, { type: 'image/jpeg' });
-
-            // Step 2: Send to local Python enhancement API
-            const formData = new FormData();
-            formData.append('file', imageFile);
-            formData.append('skipEsrgan', 'false'); // Use full enhancement (GFPGAN + Real-ESRGAN)
-
-            const enhanceResponse = await fetch('/api/enhance-local', {
+            // 使用 Replicate 增强 API 处理图片
+            const enhanceResponse = await fetch('/api/enhance-image', {
               method: 'POST',
-              body: formData,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                imageUrl: result.imageUrl,
+                enhanceModel: imageEnhanceModel,
+                outputFormat: 'jpg',
+                upscaleFactor: imageEnhanceUpscale,
+                faceEnhancement: imageEnhanceFaceEnhancement,
+                subjectDetection: 'Foreground',
+                faceEnhancementStrength: imageEnhanceFaceStrength,
+                faceEnhancementCreativity: imageEnhanceFaceCreativity
+              })
             });
 
             if (!enhanceResponse.ok) {
@@ -1239,48 +1238,21 @@ export default function Home() {
 
             const enhanceData = await enhanceResponse.json();
 
-            if (enhanceData.success && enhanceData.downloadUrl) {
-              // Step 3: Download the enhanced image from Python service
-              const enhancedResponse = await fetch(enhanceData.downloadUrl);
-              if (!enhancedResponse.ok) {
-                throw new Error('Failed to download enhanced image');
-              }
-              const enhancedBlob = await enhancedResponse.blob();
-              const enhancedFile = new File([enhancedBlob], enhanceData.filename, { type: 'image/png' });
-
-              // Step 4: Upload enhanced image to R2
-              const uploadFormData = new FormData();
-              uploadFormData.append('files', enhancedFile);
-
-              const uploadResponse = await fetch('/api/upload', {
-                method: 'POST',
-                body: uploadFormData,
-              });
-
-              if (!uploadResponse.ok) {
-                throw new Error('Failed to upload enhanced image to R2');
-              }
-
-              const uploadData = await uploadResponse.json();
-              const enhancedUrl = uploadData.uploads?.[0]?.url;
-
-              if (enhancedUrl) {
-                // 更新增强后的URL
-                setModelPoseGeneratedImages(prev =>
-                  prev.map(item =>
-                    item.poseIndex === result.poseIndex
-                      ? { ...item, enhancedUrl: enhancedUrl, status: 'enhanced' as const }
-                      : item
-                  )
-                );
-                console.log(`✅ Enhancement completed for pose ${result.poseIndex}`);
-                return { poseIndex: result.poseIndex, success: true };
-              } else {
-                throw new Error('No enhanced URL returned from upload');
-              }
-            } else {
+            const enhancedUrl = enhanceData.url;
+            if (!enhancedUrl) {
               throw new Error(enhanceData.error || 'No enhanced image returned');
             }
+
+            // 更新增强后的URL
+            setModelPoseGeneratedImages(prev =>
+              prev.map(item =>
+                item.poseIndex === result.poseIndex
+                  ? { ...item, enhancedUrl, status: 'enhanced' as const }
+                  : item
+              )
+            );
+            console.log(`✅ Enhancement completed for pose ${result.poseIndex}`);
+            return { poseIndex: result.poseIndex, success: true };
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Enhancement failed';
             console.error(`❌ Enhancement failed for pose ${result.poseIndex}:`, errorMessage);
@@ -3714,28 +3686,50 @@ export default function Home() {
                                     <button
                                       onClick={async () => {
                                         const completedImages = modelPoseGeneratedImages.filter(img => img.status === 'completed' || img.status === 'enhanced');
-                                        const dirName = `${downloadDirPrefix}_${character}`;
-                                        for (let i = 0; i < completedImages.length; i++) {
-                                          const item = completedImages[i];
-                                          try {
-                                            // 优先下载增强后的图片，如果没有则下载原图
-                                            const imageUrl = item.enhancedUrl || item.imageUrl;
-                                            // 使用新的文件命名格式: 目录前缀_模特名称_姿势X.png
-                                            const filename = `${dirName}_姿势${item.poseIndex + 1}.png`;
-                                            const downloadUrl = `/api/download?url=${encodeURIComponent(imageUrl)}&filename=${encodeURIComponent(filename)}`;
-                                            const a = document.createElement('a');
-                                            a.href = downloadUrl;
-                                            a.download = filename;
-                                            document.body.appendChild(a);
-                                            a.click();
-                                            document.body.removeChild(a);
-                                            // 添加延迟避免浏览器阻止多个下载
-                                            if (i < completedImages.length - 1) {
-                                              await new Promise(resolve => setTimeout(resolve, 500));
-                                            }
-                                          } catch (error) {
-                                            console.error(`下载图片 ${item.poseIndex + 1} 失败:`, error);
+
+                                        if (completedImages.length === 0) {
+                                          alert('没有可下载的图片');
+                                          return;
+                                        }
+
+                                        try {
+                                          // 创建 ZIP 文件
+                                          const zip = new JSZip();
+                                          const dirName = `${downloadDirPrefix}_${character}`;
+                                          const folder = zip.folder(dirName);
+
+                                          if (!folder) {
+                                            throw new Error('Failed to create ZIP folder');
                                           }
+
+                                          // 下载所有图片并添加到 ZIP
+                                          for (let i = 0; i < completedImages.length; i++) {
+                                            const item = completedImages[i];
+                                            try {
+                                              // 优先下载增强后的图片，如果没有则下载原图
+                                              const imageUrl = item.enhancedUrl || item.imageUrl;
+                                              const response = await fetch(imageUrl);
+                                              const blob = await response.blob();
+                                              const filename = `${dirName}_姿势${item.poseIndex + 1}${item.enhancedUrl ? '_增强版' : ''}.png`;
+                                              folder.file(filename, blob);
+                                            } catch (error) {
+                                              console.error(`添加图片 ${item.poseIndex + 1} 到 ZIP 失败:`, error);
+                                            }
+                                          }
+
+                                          // 生成 ZIP 文件并下载
+                                          const zipBlob = await zip.generateAsync({ type: 'blob' });
+                                          const url = URL.createObjectURL(zipBlob);
+                                          const a = document.createElement('a');
+                                          a.href = url;
+                                          a.download = `${dirName}_批量下载.zip`;
+                                          document.body.appendChild(a);
+                                          a.click();
+                                          document.body.removeChild(a);
+                                          URL.revokeObjectURL(url);
+                                        } catch (error) {
+                                          console.error('创建 ZIP 文件失败:', error);
+                                          alert('下载失败，请稍后重试');
                                         }
                                       }}
                                       className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:from-blue-600 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-medium"
@@ -3743,7 +3737,7 @@ export default function Home() {
                                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                                       </svg>
-                                      一键下载 ({downloadDirPrefix}_{character})
+                                      一键下载ZIP ({downloadDirPrefix}_{character})
                                     </button>
                                     <button
                                       onClick={() => setShowDownloadSettings(!showDownloadSettings)}

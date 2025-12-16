@@ -8,10 +8,11 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
-    "batch-metadata": "npx tsx scripts/batch-add-metadata.ts"    
+    "batch-metadata": "npx tsx scripts/batch-add-metadata.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.723.0",
+    "jszip": "^3.10.1",
     "next": "15.5.7",
     "openai": "^4.0.0",
     "piexifjs": "^1.0.6",

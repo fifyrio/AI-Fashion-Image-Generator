@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
             imageUrl,
             enhanceModel = defaultOptions.enhanceModel || 'Low Resolution V2',
             outputFormat = defaultOptions.outputFormat || 'jpg',
-            upscaleFactor = defaultOptions.upscaleFactor || '6x',
+            upscaleFactor = defaultOptions.upscaleFactor || '2x',
             faceEnhancement = defaultOptions.faceEnhancement ?? true,
             subjectDetection = defaultOptions.subjectDetection || 'Foreground',
             faceEnhancementStrength = defaultOptions.faceEnhancementStrength ?? 0.8,
