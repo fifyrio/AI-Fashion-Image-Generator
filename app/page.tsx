@@ -55,8 +55,8 @@ type GeneratedImage = {
 type ModelGender = 'female' | 'male';
 
 const MODEL_GENERATION_PROMPTS: Record<ModelGender, string> = {
-  female: '25 岁东亚女生，淡妆，微笑，白色背景，竖构图，全身模特照，高清，手机自拍挡住脸，佩戴白色口罩，适合时尚穿搭展示。',
-  male: '28 岁东亚男生，干净短发，微笑，白色背景，竖构图，全身模特照，高清，手机自拍挡住脸，佩戴白色口罩，适合时尚穿搭展示。'
+  female: '25 岁东亚女生，淡妆，微笑，白色背景，竖构图，全身模特照，高清，手机自拍挡住脸，佩戴纯白色医用外科口罩（一次性三层无纺布口罩，纯白色无任何图案，有金属鼻夹条，白色耳挂绳，标准医用口罩样式），适合时尚穿搭展示。',
+  male: '28 岁东亚男生，干净短发，微笑，白色背景，竖构图，全身模特照，高清，手机自拍挡住脸，佩戴纯白色医用外科口罩（一次性三层无纺布口罩，纯白色无任何图案，有金属鼻夹条，白色耳挂绳，标准医用口罩样式），适合时尚穿搭展示。'
 };
 
 const MODEL_STYLE_MAP = {
@@ -2973,7 +2973,7 @@ export default function Home() {
                     <span className="font-semibold text-gray-800">模特佩戴白色口罩</span>
                   </div>
                   <p className="text-sm text-gray-600 mt-1">
-                    开启后，生成的图片中模特将佩戴白色口罩
+                    开启后，生成的图片中模特将佩戴纯白色医用外科口罩（标准样式）
                   </p>
                 </div>
               </label>
@@ -3435,7 +3435,7 @@ export default function Home() {
                             <span className="font-semibold text-gray-800">模特带白色口罩</span>
                           </div>
                           <p className="text-sm text-gray-600 mt-1">
-                            开启后，AI分析和生成的每个姿势都将包含白色口罩
+                            开启后，AI分析和生成的每个姿势都将包含纯白色医用外科口罩（标准样式）
                           </p>
                         </div>
                       </label>

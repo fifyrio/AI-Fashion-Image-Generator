@@ -506,7 +506,7 @@ export class KIEImageService {
                 poseWithExtras = `${poseWithExtras}，模特一只手举着手机`;
             }
             if (wearingMask) {
-                poseWithExtras = `${poseWithExtras}，模特带着白色口罩`;
+                poseWithExtras = `${poseWithExtras}，模特佩戴纯白色医用外科口罩（一次性三层无纺布口罩，纯白色无任何图案，有金属鼻夹条，白色耳挂绳，标准医用口罩样式）`;
             }
 
             const prompt = `保持图片中的服装样式和背景环境完全不变（${description}），只改变模特的姿势:
@@ -796,7 +796,7 @@ export class KIEImageService {
 
 4. **面部表情**：自然微笑或平静表情，眼神看向镜头或略微偏向一侧
 
-5. **面部配饰**：模特佩戴白色口罩
+5. **面部配饰**：模特佩戴纯白色医用外科口罩（一次性三层无纺布口罩，纯白色无任何图案，有金属鼻夹条，白色耳挂绳，标准医用口罩样式）
 
 **✅ 必须做到：**
 - 严格按照上述手部、身体、腿部的具体描述生成姿势
