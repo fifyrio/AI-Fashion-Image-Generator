@@ -72,7 +72,7 @@ const IMAGE_ENHANCE_UPSCALE_OPTIONS = ['2x', '4x', '6x'] as const;
 type ImageEnhanceModel = (typeof IMAGE_ENHANCE_MODELS)[number];
 type ImageEnhanceUpscale = (typeof IMAGE_ENHANCE_UPSCALE_OPTIONS)[number];
 
-type TabType = 'outfit-change' | 'scene-pose' | 'model-pose' | 'model-generation' | 'image-enhance' | 'outfit-change-v2' | 'mimic-reference' | 'copywriting' | 'pants-closeup' | 'anime-cover';
+type TabType = 'outfit-change' | 'scene-pose' | 'model-pose' | 'model-generation' | 'image-enhance' | 'image-enhance-v2' | 'outfit-change-v2' | 'mimic-reference' | 'copywriting' | 'pants-closeup' | 'anime-cover';
 
 interface ScenePoseSuggestion {
   scene: string;
@@ -135,8 +135,6 @@ export default function Home() {
   const [modelWearingMask, setModelWearingMask] = useState(false);
   const [modelPoseUseProModel, setModelPoseUseProModel] = useState(false);
   const [modelPoseAutoEnhance, setModelPoseAutoEnhance] = useState(true);
-  const [modelPoseEnhanceUpscale, setModelPoseEnhanceUpscale] = useState<ImageEnhanceUpscale>('2x');
-  const [modelPoseEnhanceModel, setModelPoseEnhanceModel] = useState<ImageEnhanceModel>('Low Resolution V2');
 
   // Outfit-Change-V2 tab states - 批量处理
   const [outfitV2OriginalFiles, setOutfitV2OriginalFiles] = useState<File[]>([]);
@@ -263,6 +261,20 @@ export default function Home() {
   }>>([]);
   const [batchEnhanceMode, setBatchEnhanceMode] = useState(false);
   const batchEnhanceFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Image Enhance V2 states (using local Python service)
+  const [enhanceV2Files, setEnhanceV2Files] = useState<File[]>([]);
+  const [enhanceV2Previews, setEnhanceV2Previews] = useState<string[]>([]);
+  const [enhanceV2Results, setEnhanceV2Results] = useState<Array<{
+    originalUrl: string;
+    enhancedUrl?: string;
+    status: 'pending' | 'enhancing' | 'enhanced' | 'error';
+    error?: string;
+  }>>([]);
+  const [enhanceV2Processing, setEnhanceV2Processing] = useState(false);
+  const [enhanceV2Error, setEnhanceV2Error] = useState('');
+  const [enhanceV2SkipEsrgan, setEnhanceV2SkipEsrgan] = useState(false);
+  const enhanceV2FileInputRef = useRef<HTMLInputElement | null>(null);
 
   const clearMockProgressTimers = () => {
     if (progressIntervalRef.current) {
@@ -1202,41 +1214,72 @@ export default function Home() {
               )
             );
 
-            const enhanceResponse = await fetch('/api/enhance-images-batch', {
+            // Step 1: Download the generated image
+            const imageResponse = await fetch(result.imageUrl);
+            if (!imageResponse.ok) {
+              throw new Error('Failed to download image');
+            }
+            const imageBlob = await imageResponse.blob();
+            const imageFile = new File([imageBlob], `pose_${result.poseIndex}.jpg`, { type: 'image/jpeg' });
+
+            // Step 2: Send to local Python enhancement API
+            const formData = new FormData();
+            formData.append('file', imageFile);
+            formData.append('skipEsrgan', 'false'); // Use full enhancement (GFPGAN + Real-ESRGAN)
+
+            const enhanceResponse = await fetch('/api/enhance-local', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                images: [{ imageUrl: result.imageUrl }],
-                enhanceModel: modelPoseEnhanceModel,
-                outputFormat: 'jpg',
-                upscaleFactor: modelPoseEnhanceUpscale,
-                faceEnhancement: false,
-                subjectDetection: 'Foreground',
-                faceEnhancementStrength: 0.5,
-                faceEnhancementCreativity: 0.3
-              })
+              body: formData,
             });
 
             if (!enhanceResponse.ok) {
-              throw new Error('Enhancement failed');
+              const errorData = await enhanceResponse.json().catch(() => ({}));
+              throw new Error(errorData.error || 'Enhancement failed');
             }
 
             const enhanceData = await enhanceResponse.json();
-            const enhanceResult = enhanceData.results?.[0];
 
-            if (enhanceResult?.success && enhanceResult.enhancedUrl) {
-              // 更新增强后的URL
-              setModelPoseGeneratedImages(prev =>
-                prev.map(item =>
-                  item.poseIndex === result.poseIndex
-                    ? { ...item, enhancedUrl: enhanceResult.enhancedUrl, status: 'enhanced' as const }
-                    : item
-                )
-              );
-              console.log(`✅ Enhancement completed for pose ${result.poseIndex}`);
-              return { poseIndex: result.poseIndex, success: true };
+            if (enhanceData.success && enhanceData.downloadUrl) {
+              // Step 3: Download the enhanced image from Python service
+              const enhancedResponse = await fetch(enhanceData.downloadUrl);
+              if (!enhancedResponse.ok) {
+                throw new Error('Failed to download enhanced image');
+              }
+              const enhancedBlob = await enhancedResponse.blob();
+              const enhancedFile = new File([enhancedBlob], enhanceData.filename, { type: 'image/png' });
+
+              // Step 4: Upload enhanced image to R2
+              const uploadFormData = new FormData();
+              uploadFormData.append('files', enhancedFile);
+
+              const uploadResponse = await fetch('/api/upload', {
+                method: 'POST',
+                body: uploadFormData,
+              });
+
+              if (!uploadResponse.ok) {
+                throw new Error('Failed to upload enhanced image to R2');
+              }
+
+              const uploadData = await uploadResponse.json();
+              const enhancedUrl = uploadData.uploads?.[0]?.url;
+
+              if (enhancedUrl) {
+                // 更新增强后的URL
+                setModelPoseGeneratedImages(prev =>
+                  prev.map(item =>
+                    item.poseIndex === result.poseIndex
+                      ? { ...item, enhancedUrl: enhancedUrl, status: 'enhanced' as const }
+                      : item
+                  )
+                );
+                console.log(`✅ Enhancement completed for pose ${result.poseIndex}`);
+                return { poseIndex: result.poseIndex, success: true };
+              } else {
+                throw new Error('No enhanced URL returned from upload');
+              }
             } else {
-              throw new Error(enhanceResult?.error || 'No enhanced URL returned');
+              throw new Error(enhanceData.error || 'No enhanced image returned');
             }
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Enhancement failed';
@@ -2606,6 +2649,19 @@ export default function Home() {
               </div>
             </button>
             <button
+              onClick={() => setActiveTab('image-enhance-v2')}
+              className={`flex-1 px-4 py-3 text-sm font-semibold transition-all ${
+                activeTab === 'image-enhance-v2'
+                  ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-lg">✨</span>
+                <span>画质增强V2</span>
+              </div>
+            </button>
+            <button
               onClick={() => setActiveTab('mimic-reference')}
               className={`flex-1 px-4 py-3 text-sm font-semibold transition-all ${
                 activeTab === 'mimic-reference'
@@ -3492,49 +3548,17 @@ export default function Home() {
                         </div>
                       </label>
 
-                      {/* Enhancement Settings */}
+                      {/* Enhancement Info */}
                       {modelPoseAutoEnhance && (
-                        <div className="mt-4 pt-4 border-t border-green-200 space-y-3">
-                          <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">
-                              增强模型
-                            </label>
-                            <div className="flex gap-2">
-                              {IMAGE_ENHANCE_MODELS.map((model) => (
-                                <button
-                                  key={model}
-                                  onClick={() => setModelPoseEnhanceModel(model)}
-                                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                                    modelPoseEnhanceModel === model
-                                      ? 'bg-green-500 text-white shadow-md'
-                                      : 'bg-white text-gray-700 hover:bg-green-100 border border-green-200'
-                                  }`}
-                                >
-                                  {model}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">
-                              放大倍数
-                            </label>
-                            <div className="flex gap-2">
-                              {IMAGE_ENHANCE_UPSCALE_OPTIONS.map((scale) => (
-                                <button
-                                  key={scale}
-                                  onClick={() => setModelPoseEnhanceUpscale(scale)}
-                                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                                    modelPoseEnhanceUpscale === scale
-                                      ? 'bg-green-500 text-white shadow-md'
-                                      : 'bg-white text-gray-700 hover:bg-green-100 border border-green-200'
-                                  }`}
-                                >
-                                  {scale}
-                                </button>
-                              ))}
-                            </div>
+                        <div className="mt-4 pt-4 border-t border-green-200">
+                          <div className="bg-green-50 rounded-lg p-3 border border-green-300">
+                            <p className="text-sm text-green-800">
+                              <span className="font-semibold">增强方式：</span>
+                              人脸修复（GFPGAN）+ 超分辨率（Real-ESRGAN）
+                            </p>
+                            <p className="text-xs text-green-700 mt-1">
+                              自动提升画质、修复人脸细节，并进行图像超分辨率处理
+                            </p>
                           </div>
                         </div>
                       )}
@@ -5724,6 +5748,314 @@ export default function Home() {
                   </p>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Image Enhance V2 Tab Content */}
+          {activeTab === 'image-enhance-v2' && (
+            <div className="space-y-6">
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-6 border border-green-200">
+                <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  <span className="text-3xl">✨</span>
+                  <span>图像画质增强 V2</span>
+                  <span className="px-2 py-0.5 bg-green-500 text-white text-xs font-bold rounded-full">本地增强</span>
+                </h2>
+                <p className="text-gray-700 mb-3">
+                  使用本地 Python 服务进行图像增强，支持人脸修复（GFPGAN）和超分辨率（Real-ESRGAN）
+                </p>
+                <div className="bg-white rounded-lg p-4 border border-green-300">
+                  <h3 className="font-semibold text-green-800 mb-2">增强特性：</h3>
+                  <ul className="text-sm text-gray-700 space-y-1">
+                    <li>✅ 人脸修复与美化（GFPGAN）</li>
+                    <li>✅ 超分辨率放大（Real-ESRGAN）</li>
+                    <li>✅ 批量处理支持</li>
+                    <li>✅ 本地处理，数据安全</li>
+                  </ul>
+                </div>
+              </div>
+
+              {/* Upload Section */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-semibold text-gray-700">上传图片</h3>
+                  {enhanceV2Files.length > 0 && (
+                    <button
+                      onClick={() => {
+                        setEnhanceV2Files([]);
+                        setEnhanceV2Previews([]);
+                        setEnhanceV2Results([]);
+                        setEnhanceV2Error('');
+                      }}
+                      className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white font-medium px-4 py-2 rounded-lg transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      清除所有
+                    </button>
+                  )}
+                </div>
+
+                {/* File Upload Area */}
+                {enhanceV2Files.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 hover:bg-gray-100 transition-all">
+                    <label
+                      htmlFor="enhance-v2-upload"
+                      className="flex flex-col items-center justify-center w-full h-full cursor-pointer"
+                    >
+                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                        <svg
+                          className="w-16 h-16 mb-4 text-gray-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                          />
+                        </svg>
+                        <div className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold py-3 px-8 rounded-lg mb-4">
+                          <div className="flex items-center gap-2">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            </svg>
+                            上传图片
+                          </div>
+                        </div>
+                        <p className="text-sm text-gray-500">点击上传或拖拽图片到此处</p>
+                        <p className="text-xs text-gray-400 mt-1">支持批量上传，最大10MB/张</p>
+                      </div>
+                    </label>
+                    <input
+                      id="enhance-v2-upload"
+                      ref={enhanceV2FileInputRef}
+                      type="file"
+                      className="hidden"
+                      accept="image/*"
+                      multiple
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files || []);
+                        if (files.length > 0) {
+                          setEnhanceV2Files(files);
+                          const previews = files.map(file => URL.createObjectURL(file));
+                          setEnhanceV2Previews(previews);
+                          setEnhanceV2Results(files.map(() => ({ originalUrl: '', status: 'pending' as const })));
+                        }
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Preview Grid */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {enhanceV2Previews.map((preview, index) => (
+                        <div key={index} className="relative group">
+                          <div className="relative w-full h-48 bg-gray-100 rounded-lg overflow-hidden">
+                            <Image
+                              src={preview}
+                              alt={`Preview ${index + 1}`}
+                              fill
+                              className="object-cover"
+                              unoptimized
+                            />
+                          </div>
+                          <div className="mt-2 text-xs text-gray-600 truncate">
+                            {enhanceV2Files[index]?.name}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Skip ESRGAN Option */}
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+                      <label className="flex items-center cursor-pointer group">
+                        <div className="relative">
+                          <input
+                            type="checkbox"
+                            checked={enhanceV2SkipEsrgan}
+                            onChange={(e) => setEnhanceV2SkipEsrgan(e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-blue-500 peer-focus:ring-4 peer-focus:ring-blue-300 transition-all"></div>
+                          <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                        </div>
+                        <div className="ml-3 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">⚡</span>
+                            <span className="font-semibold text-gray-800">仅人脸修复（跳过超分辨率）</span>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-1">
+                            开启后仅使用 GFPGAN 进行人脸修复，速度更快但不放大分辨率
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* Process Button */}
+                    <button
+                      onClick={async () => {
+                        setEnhanceV2Processing(true);
+                        setEnhanceV2Error('');
+
+                        try {
+                          // Process each image
+                          for (let i = 0; i < enhanceV2Files.length; i++) {
+                            const file = enhanceV2Files[i];
+
+                            // Update status to enhancing
+                            setEnhanceV2Results(prev =>
+                              prev.map((r, idx) =>
+                                idx === i ? { ...r, status: 'enhancing' as const } : r
+                              )
+                            );
+
+                            // Send to enhancement API
+                            const formData = new FormData();
+                            formData.append('file', file);
+                            formData.append('skipEsrgan', enhanceV2SkipEsrgan ? 'true' : 'false');
+
+                            const enhanceResponse = await fetch('/api/enhance-local', {
+                              method: 'POST',
+                              body: formData,
+                            });
+
+                            if (!enhanceResponse.ok) {
+                              const errorData = await enhanceResponse.json().catch(() => ({}));
+                              throw new Error(errorData.error || 'Enhancement failed');
+                            }
+
+                            const enhanceData = await enhanceResponse.json();
+
+                            if (enhanceData.success && enhanceData.downloadUrl) {
+                              // Download enhanced image
+                              const downloadResponse = await fetch(enhanceData.downloadUrl);
+                              if (!downloadResponse.ok) {
+                                throw new Error('Failed to download enhanced image');
+                              }
+
+                              const blob = await downloadResponse.blob();
+                              const enhancedFile = new File([blob], enhanceData.filename, { type: 'image/png' });
+
+                              // Upload to R2
+                              const uploadFormData = new FormData();
+                              uploadFormData.append('files', enhancedFile);
+
+                              const uploadResponse = await fetch('/api/upload', {
+                                method: 'POST',
+                                body: uploadFormData,
+                              });
+
+                              if (!uploadResponse.ok) {
+                                throw new Error('Failed to upload enhanced image to R2');
+                              }
+
+                              const uploadData = await uploadResponse.json();
+                              const enhancedUrl = uploadData.uploads?.[0]?.url;
+
+                              if (enhancedUrl) {
+                                // Update result
+                                setEnhanceV2Results(prev =>
+                                  prev.map((r, idx) =>
+                                    idx === i
+                                      ? {
+                                          originalUrl: enhanceV2Previews[i],
+                                          enhancedUrl: enhancedUrl,
+                                          status: 'enhanced' as const,
+                                        }
+                                      : r
+                                  )
+                                );
+                              } else {
+                                throw new Error('No enhanced URL returned');
+                              }
+                            } else {
+                              throw new Error(enhanceData.error || 'Enhancement failed');
+                            }
+                          }
+                        } catch (error) {
+                          const errorMessage = error instanceof Error ? error.message : 'Processing failed';
+                          setEnhanceV2Error(errorMessage);
+                          console.error('Enhancement V2 error:', error);
+                        } finally {
+                          setEnhanceV2Processing(false);
+                        }
+                      }}
+                      disabled={enhanceV2Processing}
+                      className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100"
+                    >
+                      {enhanceV2Processing ? (
+                        <div className="flex items-center justify-center gap-3">
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                          <span>处理中...</span>
+                        </div>
+                      ) : (
+                        `开始增强 (${enhanceV2Files.length} 张图片)`
+                      )}
+                    </button>
+
+                    {/* Error Message */}
+                    {enhanceV2Error && (
+                      <div className="p-4 rounded-lg bg-red-100 text-red-800">
+                        {enhanceV2Error}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Results Section */}
+              {enhanceV2Results.some(r => r.enhancedUrl) && (
+                <div className="space-y-4">
+                  <h3 className="text-xl font-semibold text-gray-700">增强结果</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {enhanceV2Results.map((result, index) => (
+                      result.enhancedUrl && (
+                        <div key={index} className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
+                          <h4 className="font-semibold text-gray-700">图片 {index + 1}</h4>
+                          <div className="grid grid-cols-2 gap-3">
+                            {/* Original */}
+                            <div>
+                              <p className="text-xs text-gray-500 mb-2">原图</p>
+                              <div className="relative w-full h-48 bg-gray-100 rounded-lg overflow-hidden">
+                                <Image
+                                  src={result.originalUrl}
+                                  alt="Original"
+                                  fill
+                                  className="object-cover"
+                                  unoptimized
+                                />
+                              </div>
+                            </div>
+                            {/* Enhanced */}
+                            <div>
+                              <p className="text-xs text-gray-500 mb-2">增强后 ✨</p>
+                              <div className="relative w-full h-48 bg-gray-100 rounded-lg overflow-hidden">
+                                <Image
+                                  src={result.enhancedUrl}
+                                  alt="Enhanced"
+                                  fill
+                                  className="object-cover"
+                                  unoptimized
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <a
+                            href={result.enhancedUrl}
+                            download
+                            className="block w-full text-center bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+                          >
+                            下载增强图片
+                          </a>
+                        </div>
+                      )
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

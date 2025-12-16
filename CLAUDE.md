@@ -33,6 +33,8 @@ This is a **Next.js 15 web application** using the App Router:
 - `POST /api/callback` – receives KIE API webhook callbacks and processes completed generation tasks
 - `GET /api/task-status?taskId=xxx` – queries the status of a KIE generation task
 - `GET /api/results` – lists generated assets (reads metadata from R2)
+- `POST /api/enhance-local` – proxy endpoint for local Python image enhancement service (GFPGAN + Real-ESRGAN)
+- `GET /api/enhance-local` – health check for the local Python enhancement service
 
 ## Environment Variables
 
@@ -50,10 +52,18 @@ Required environment variables:
 - `R2_MODEL_BASE_URL` – (Optional) Base URL for model images
 
 **Required** for KIE image generation (current default):
-- `KIE_API_TOKEN` – KIE API token for google/nano-banana-edit model
-- `KIE_CALLBACK_URL` – Callback URL for KIE API (e.g., https://your-site.vercel.app/api/callback)
 
-**Note:** The application now uses KIE as the default image generation service. Ensure these variables are configured before deploying.
+- `KIE_API_TOKEN` – KIE API token for google/nano-banana-edit model
+- `KIE_CALLBACK_URL` – Callback URL for KIE API (e.g., <https://your-site.vercel.app/api/callback>)
+
+**Optional** for local image enhancement (model-pose tab):
+
+- `IMAGE_ENHANCE_API_URL` – URL of the local Python image enhancement service (default: <http://localhost:8000>)
+
+**Notes:**
+
+- The application uses KIE as the default image generation service. Ensure these variables are configured before deploying.
+- The model-pose tab's auto-enhancement feature requires a local Python service running at `IMAGE_ENHANCE_API_URL`. The service uses GFPGAN for face restoration and Real-ESRGAN for super-resolution. See `/Users/wuwei/Documents/nodejs/image-enhance/API_GUIDE.md` for setup instructions.
 
 ## Deployment on Vercel
 
