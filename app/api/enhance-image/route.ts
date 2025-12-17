@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
       imageUrl,
       enhanceModel = 'Low Resolution V2',
       outputFormat = 'jpg',
-      upscaleFactor = '6x',
+      upscaleFactor = '2x',
       faceEnhancement = true,
       subjectDetection = 'Foreground',
       faceEnhancementStrength = 0.8,
