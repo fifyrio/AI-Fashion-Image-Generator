@@ -8,7 +8,10 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(pnpm build:*)",
-      "Bash(pnpm install:*)"
+      "Bash(pnpm install:*)",
+      "Bash(grep:*)",
+      "Bash(npx eslint:*)",
+      "Bash(pnpm run build:*)"
     ]
   }
 }

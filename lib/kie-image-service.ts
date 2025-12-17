@@ -508,7 +508,6 @@ export class KIEImageService {
 
             // 口罩描述 - 提升优先级和详细度
             let maskRequirement = '';
-            let maskNegativePrompt = '';
             if (wearingMask) {
                 maskRequirement = `
 

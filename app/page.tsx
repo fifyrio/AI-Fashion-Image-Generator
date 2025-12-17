@@ -3703,21 +3703,57 @@ export default function Home() {
                                           }
 
                                           // 下载所有图片并添加到 ZIP
+                                          let successCount = 0;
+                                          let failedCount = 0;
+
                                           for (let i = 0; i < completedImages.length; i++) {
                                             const item = completedImages[i];
                                             try {
                                               // 优先下载增强后的图片，如果没有则下载原图
                                               const imageUrl = item.enhancedUrl || item.imageUrl;
+
+                                              // 验证URL不为空
+                                              if (!imageUrl) {
+                                                console.error(`图片 ${item.poseIndex + 1} 没有有效的URL`);
+                                                failedCount++;
+                                                continue;
+                                              }
+
+                                              console.log(`正在下载图片 ${item.poseIndex + 1}:`, imageUrl);
                                               const response = await fetch(imageUrl);
+
+                                              // 检查HTTP响应状态
+                                              if (!response.ok) {
+                                                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                                              }
+
                                               const blob = await response.blob();
                                               const filename = `${dirName}_姿势${item.poseIndex + 1}${item.enhancedUrl ? '_增强版' : ''}.png`;
                                               folder.file(filename, blob);
+                                              successCount++;
+                                              console.log(`✓ 图片 ${item.poseIndex + 1} 添加成功`);
                                             } catch (error) {
-                                              console.error(`添加图片 ${item.poseIndex + 1} 到 ZIP 失败:`, error);
+                                              failedCount++;
+                                              console.error(`✗ 添加图片 ${item.poseIndex + 1} 到 ZIP 失败:`, error);
+                                            }
+                                          }
+
+                                          // 验证是否有成功的图片
+                                          if (successCount === 0) {
+                                            alert(`下载失败：所有图片都无法获取 (${failedCount} 张失败)\n\n请检查：\n1. 网络连接是否正常\n2. 图片是否已被删除\n3. 浏览器控制台的错误信息`);
+                                            return;
+                                          }
+
+                                          // 显示统计信息
+                                          if (failedCount > 0) {
+                                            console.warn(`⚠️ 下载统计: ${successCount} 成功, ${failedCount} 失败`);
+                                            if (!confirm(`成功: ${successCount} 张\n失败: ${failedCount} 张\n\n是否继续下载？`)) {
+                                              return;
                                             }
                                           }
 
                                           // 生成 ZIP 文件并下载
+                                          console.log(`开始生成ZIP文件，包含 ${successCount} 张图片...`);
                                           const zipBlob = await zip.generateAsync({ type: 'blob' });
                                           const url = URL.createObjectURL(zipBlob);
                                           const a = document.createElement('a');
