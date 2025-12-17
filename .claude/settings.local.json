@@ -13,7 +13,8 @@
       "Bash(npx eslint:*)",
       "Bash(pnpm run build:*)",
       "Bash(npx tsc:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(pnpm add:*)"
     ]
   }
 }

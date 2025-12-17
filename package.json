@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.723.0",
+    "archiver": "^7.0.1",
     "jszip": "^3.10.1",
     "next": "15.5.7",
     "openai": "^4.0.0",
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@types/archiver": "^7.0.0",
     "@types/node": "^20",
     "@types/piexifjs": "^1.0.0",
     "@types/react": "^19",

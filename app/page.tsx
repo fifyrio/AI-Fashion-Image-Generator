@@ -4,7 +4,6 @@ import Image from 'next/image';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import type { UploadedReference } from '@/lib/types';
 import type { GeneratedImageSummary } from '@/lib/pipeline';
-import JSZip from 'jszip';
 
 interface CharacterOption {
   id: string;
@@ -3693,69 +3692,44 @@ export default function Home() {
                                         }
 
                                         try {
-                                          // 创建 ZIP 文件
-                                          const zip = new JSZip();
                                           const dirName = `${downloadDirPrefix}_${character}`;
-                                          const folder = zip.folder(dirName);
 
-                                          if (!folder) {
-                                            throw new Error('Failed to create ZIP folder');
+                                          console.log(`📦 开始打包下载 ${completedImages.length} 张图片...`);
+
+                                          // 调用后端API打包下载
+                                          const response = await fetch('/api/download-pose-images', {
+                                            method: 'POST',
+                                            headers: {
+                                              'Content-Type': 'application/json',
+                                            },
+                                            body: JSON.stringify({
+                                              images: completedImages,
+                                              dirName: dirName
+                                            }),
+                                          });
+
+                                          if (!response.ok) {
+                                            const errorData = await response.json();
+                                            throw new Error(errorData.error || `下载失败: ${response.status}`);
                                           }
 
-                                          // 下载所有图片并添加到 ZIP
-                                          let successCount = 0;
-                                          let failedCount = 0;
-
-                                          for (let i = 0; i < completedImages.length; i++) {
-                                            const item = completedImages[i];
-                                            try {
-                                              // 优先下载增强后的图片，如果没有则下载原图
-                                              const imageUrl = item.enhancedUrl || item.imageUrl;
-
-                                              // 验证URL不为空
-                                              if (!imageUrl) {
-                                                console.error(`图片 ${item.poseIndex + 1} 没有有效的URL`);
-                                                failedCount++;
-                                                continue;
-                                              }
-
-                                              console.log(`正在下载图片 ${item.poseIndex + 1}:`, imageUrl);
-                                              const response = await fetch(imageUrl);
-
-                                              // 检查HTTP响应状态
-                                              if (!response.ok) {
-                                                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                                              }
-
-                                              const blob = await response.blob();
-                                              const filename = `${dirName}_姿势${item.poseIndex + 1}${item.enhancedUrl ? '_增强版' : ''}.png`;
-                                              folder.file(filename, blob);
-                                              successCount++;
-                                              console.log(`✓ 图片 ${item.poseIndex + 1} 添加成功`);
-                                            } catch (error) {
-                                              failedCount++;
-                                              console.error(`✗ 添加图片 ${item.poseIndex + 1} 到 ZIP 失败:`, error);
-                                            }
-                                          }
-
-                                          // 验证是否有成功的图片
-                                          if (successCount === 0) {
-                                            alert(`下载失败：所有图片都无法获取 (${failedCount} 张失败)\n\n请检查：\n1. 网络连接是否正常\n2. 图片是否已被删除\n3. 浏览器控制台的错误信息`);
-                                            return;
-                                          }
+                                          // 获取统计信息
+                                          const successCount = parseInt(response.headers.get('X-Success-Count') || '0');
+                                          const failedCount = parseInt(response.headers.get('X-Failed-Count') || '0');
+                                          const failedImages = response.headers.get('X-Failed-Images') || '';
 
                                           // 显示统计信息
                                           if (failedCount > 0) {
                                             console.warn(`⚠️ 下载统计: ${successCount} 成功, ${failedCount} 失败`);
-                                            if (!confirm(`成功: ${successCount} 张\n失败: ${failedCount} 张\n\n是否继续下载？`)) {
+                                            console.warn(`失败的图片: ${failedImages}`);
+                                            if (!confirm(`成功: ${successCount} 张\n失败: ${failedCount} 张\n失败的图片编号: ${failedImages}\n\n是否继续下载？`)) {
                                               return;
                                             }
                                           }
 
-                                          // 生成 ZIP 文件并下载
-                                          console.log(`开始生成ZIP文件，包含 ${successCount} 张图片...`);
-                                          const zipBlob = await zip.generateAsync({ type: 'blob' });
-                                          const url = URL.createObjectURL(zipBlob);
+                                          // 下载 ZIP 文件
+                                          const blob = await response.blob();
+                                          const url = URL.createObjectURL(blob);
                                           const a = document.createElement('a');
                                           a.href = url;
                                           a.download = `${dirName}_批量下载.zip`;
@@ -3763,9 +3737,11 @@ export default function Home() {
                                           a.click();
                                           document.body.removeChild(a);
                                           URL.revokeObjectURL(url);
+
+                                          console.log(`✅ 下载完成! ${successCount} 张图片`);
                                         } catch (error) {
-                                          console.error('创建 ZIP 文件失败:', error);
-                                          alert('下载失败，请稍后重试');
+                                          console.error('❌ 下载失败:', error);
+                                          alert(`下载失败: ${error instanceof Error ? error.message : '未知错误'}\n\n请检查网络连接或稍后重试`);
                                         }
                                       }}
                                       className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:from-blue-600 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg flex items-center gap-2 text-sm font-medium"
