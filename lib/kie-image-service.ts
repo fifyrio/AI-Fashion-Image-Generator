@@ -498,6 +498,9 @@ export class KIEImageService {
             console.log(`😷 Wearing Mask: ${wearingMask}`);
             console.log(`🚀 Use Pro Model: ${useProModel}`);
             console.log(`🖼️  Image URL: ${imageUrl}`);
+            if (wearingMask) {
+                console.log(`😷 Mask Reference: https://png.pngtree.com/png-clipart/20200826/ourmid/pngtree-3d-stereo-white-medical-mask-element-png-image_2332283.jpg`);
+            }
 
             // 构建提示词
             let poseWithExtras = pose;
@@ -506,33 +509,18 @@ export class KIEImageService {
                 poseWithExtras = `${poseWithExtras}，模特一只手举着手机`;
             }
 
-            // 口罩描述 - 提升优先级和详细度
+            // 口罩描述 - 简化，依赖参考图片
             let maskRequirement = '';
             if (wearingMask) {
                 maskRequirement = `
 
-🎭 【口罩统一要求 - 最高优先级】：
-模特必须佩戴统一样式的纯白色一次性醫用口罩，具体规格：
-- 类型：标准三层一次性醫用口罩
-- 颜色：纯白色（#FFFFFF），表面无任何图案、文字、logo、装饰
-- 材质：无纺布材质，表面平整光滑
-- 结构特征：
-  * 口罩上端有细金属条（银色或白色，可微微弯曲贴合鼻梁）
-  * 两侧有白色弹力耳挂绳
-  * 口罩呈三层褶皱结构（横向褶皱）
-  * 覆盖范围：从鼻梁顶部到下巴底部
-- 佩戴方式：正确规范佩戴，完全覆盖口鼻，金属条压紧鼻梁，无缝隙
-- 口罩要在每张图片中保持完全一致的样式
+🎭 【口罩要求 - 最高优先级】：
+模特必须佩戴口罩，口罩样式严格参考第二张输入图片（口罩参考图）：
+- 📸 **完全按照参考图片中的口罩样式生成**
+- ✅ 所有图片中的口罩必须保持完全一致的样式、颜色、形状
+- ✅ 口罩要正确规范佩戴，完全覆盖口鼻`;
 
-❌ 严格禁止出现以下口罩类型：
-- N95/KN95立体口罩
-- 黑色/深色/彩色口罩
-- 带图案/印花/文字的口罩
-- 布口罩/时尚口罩
-- 带呼吸阀的口罩
-- 海绵口罩/防尘口罩`;
-
-                poseWithExtras = `${poseWithExtras}，佩戴纯白色一次性醫用口罩`;
+                poseWithExtras = `${poseWithExtras}，佩戴口罩（样式参考第二张图片）`;
             }
 
             const prompt = `${maskRequirement}
@@ -610,12 +598,16 @@ export class KIEImageService {
 2. **模特的眼神必须看向镜头或略微偏向一侧，绝对不要朝地上看、朝下看** - 这是最高优先级要求
 3. **在展现背面姿势时，臀部的大小、形状、曲线必须与原图完全一致**
 4. 在展现腿部动作自然优雅的同时，必须完全保持原图中腿部的长度、粗细和形状不变
-5. 所有身材特征（臀部、腿部、腰部等）都必须与原图100%一致，只改变姿势角度${wearingMask ? '\n6. **【口罩要求再次强调】模特必须佩戴纯白色一次性醫用口罩，所有图片中的口罩样式必须完全一致：白色无图案、三层褶皱、金属鼻夹、白色耳挂，禁止N95或彩色口罩**' : ''}`;
+5. 所有身材特征（臀部、腿部、腰部等）都必须与原图100%一致，只改变姿势角度${wearingMask ? '\n6. **【口罩要求再次强调】模特必须佩戴口罩，口罩样式完全按照第二张输入图片（口罩参考图）生成，所有图片中的口罩必须保持完全一致**' : ''}`;
 
             // 创建任务（根据useProModel选择不同的方法）
+            // 如果开启口罩功能，添加口罩参考图片
+            const maskReferenceUrl = 'https://png.pngtree.com/png-clipart/20200826/ourmid/pngtree-3d-stereo-white-medical-mask-element-png-image_2332283.jpg';
+            const imageInputs = wearingMask ? [imageUrl, maskReferenceUrl] : imageUrl;
+
             const taskId = useProModel
-                ? await this.createProTask(prompt, imageUrl, '9:16', '2K')
-                : await this.createTask(prompt, imageUrl);
+                ? await this.createProTask(prompt, imageInputs, '9:16', '2K')
+                : await this.createTask(prompt, imageInputs);
             console.log(`✅ KIE task created: ${taskId}`);
 
             // 保存任务元数据到 R2

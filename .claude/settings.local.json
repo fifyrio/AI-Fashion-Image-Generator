@@ -11,7 +11,9 @@
       "Bash(pnpm install:*)",
       "Bash(grep:*)",
       "Bash(npx eslint:*)",
-      "Bash(pnpm run build:*)"
+      "Bash(pnpm run build:*)",
+      "Bash(npx tsc:*)",
+      "Bash(curl:*)"
     ]
   }
 }
