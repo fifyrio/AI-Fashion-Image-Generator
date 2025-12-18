@@ -239,7 +239,7 @@ export default function Home() {
   const [imageEnhanceUrl, setImageEnhanceUrl] = useState('');
   const [imageEnhancePreview, setImageEnhancePreview] = useState('');
   const [imageEnhanceModel, setImageEnhanceModel] = useState<ImageEnhanceModel>(IMAGE_ENHANCE_MODELS[0]);
-  const [imageEnhanceUpscale, setImageEnhanceUpscale] = useState<ImageEnhanceUpscale>('6x');
+  const [imageEnhanceUpscale, setImageEnhanceUpscale] = useState<ImageEnhanceUpscale>('2x');
   const [imageEnhanceFaceEnhancement, setImageEnhanceFaceEnhancement] = useState(true);
   const [imageEnhanceFaceStrength, setImageEnhanceFaceStrength] = useState(0.8);
   const [imageEnhanceFaceCreativity, setImageEnhanceFaceCreativity] = useState(0.5);
