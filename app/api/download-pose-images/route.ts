@@ -91,10 +91,14 @@ export async function POST(request: NextRequest) {
     const webStream = Readable.toWeb(nodeStream) as ReadableStream;
 
     // 返回 ZIP 文件
+    // 使用 RFC 5987 编码来支持非 ASCII 字符
+    const zipFilename = `${dirName}_批量下载.zip`;
+    const encodedFilename = encodeURIComponent(zipFilename);
+
     return new NextResponse(webStream, {
       headers: {
         'Content-Type': 'application/zip',
-        'Content-Disposition': `attachment; filename="${dirName}_批量下载.zip"`,
+        'Content-Disposition': `attachment; filename="download.zip"; filename*=UTF-8''${encodedFilename}`,
         'X-Success-Count': successCount.toString(),
         'X-Failed-Count': failedCount.toString(),
         'X-Failed-Images': failedImages.join(',')
