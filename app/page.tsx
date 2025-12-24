@@ -179,6 +179,7 @@ export default function Home() {
   const [outfitV2UnzipJacket, setOutfitV2UnzipJacket] = useState(false);
   const [outfitV2AdjustPose, setOutfitV2AdjustPose] = useState(false);
   const [outfitV2UseProModel, setOutfitV2UseProModel] = useState(false);
+  const [outfitV2WearingMask, setOutfitV2WearingMask] = useState(false);
 
   // 当前阶段
   type OutfitV2Stage = 'upload' | 'extracting' | 'extracted' | 'generating' | 'completed';
@@ -1623,6 +1624,7 @@ export default function Home() {
               character: outfitV2SelectedCharacters[0], // 使用第一个选中的模特
               adjustPose: outfitV2AdjustPose, // 模特动作微调
               useProModel: outfitV2UseProModel,
+              wearingMask: outfitV2WearingMask, // 模特佩戴白色口罩
             }),
           });
 
@@ -4903,6 +4905,31 @@ export default function Home() {
                           </div>
                           <p className="text-sm text-gray-600 mt-1">
                             开启后使用 KIE 的 nano-banana-pro 模型生成，画面更精细但速度略慢
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* Wearing Mask Option */}
+                    <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg p-4 border border-blue-200">
+                      <label className="flex items-center cursor-pointer group">
+                        <div className="relative">
+                          <input
+                            type="checkbox"
+                            checked={outfitV2WearingMask}
+                            onChange={(e) => setOutfitV2WearingMask(e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-blue-500 peer-focus:ring-4 peer-focus:ring-blue-300 transition-all"></div>
+                          <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                        </div>
+                        <div className="ml-3 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">😷</span>
+                            <span className="font-semibold text-gray-800">模特佩戴白色口罩</span>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-1">
+                            开启后，生成的换装图片中模特将佩戴纯白色医用外科口罩（标准样式）
                           </p>
                         </div>
                       </label>

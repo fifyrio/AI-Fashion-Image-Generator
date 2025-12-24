@@ -740,7 +740,8 @@ export class KIEImageService {
         modelImageUrl: string,
         character: string,
         adjustPose: boolean = false,
-        useProModel: boolean = false
+        useProModel: boolean = false,
+        wearingMask: boolean = false
     ): Promise<ImageGenerationResult & { taskId?: string }> {
         const startTime = new Date();
 
@@ -751,9 +752,21 @@ export class KIEImageService {
             console.log(`🎭 Character: ${character}`);
             console.log(`💃 Adjust Pose: ${adjustPose}`);
             console.log(`🧠 Use Pro Model: ${useProModel}`);
+            console.log(`😷 Wearing Mask: ${wearingMask}`);
 
-            // 使用换装V2的 prompt,如果开启动作微调则添加相关提示
+            // 使用换装V2的 prompt
             let prompt = OUTFIT_CHANGE_V2_PROMPT;
+
+            // 如果开启口罩功能，添加口罩要求到基础prompt
+            if (wearingMask && !adjustPose) {
+                prompt = prompt + `\n\n🎭 【口罩要求 - 最高优先级】：
+模特必须佩戴口罩，口罩样式严格参考第三张输入图片（口罩参考图）：
+- 📸 **完全按照参考图片中的口罩样式生成**
+- ✅ 所有图片中的口罩必须保持完全一致的样式、颜色、形状
+- ✅ 口罩要正确规范佩戴，完全覆盖口鼻`;
+            }
+
+            // 如果开启动作微调则添加相关提示
             if (adjustPose) {
                 // 生成随机的姿势变化选项，增加多样性
                 const handPoses = [
@@ -816,7 +829,7 @@ export class KIEImageService {
 
 4. **面部表情**：自然微笑或平静表情，眼神看向镜头或略微偏向一侧
 
-5. **面部配饰**：模特佩戴纯白色医用外科口罩（一次性三层无纺布口罩，纯白色无任何图案，有金属鼻夹条，白色耳挂绳，标准医用口罩样式）
+${wearingMask ? `5. **面部配饰**：模特佩戴口罩（口罩样式严格参考第三张输入图片）` : ''}
 
 **✅ 必须做到：**
 - 严格按照上述手部、身体、腿部的具体描述生成姿势
@@ -832,19 +845,29 @@ export class KIEImageService {
 **🎯 目标：生成一张模特穿着第一张图服装的照片，姿势按照上述具体要求改变，但身材、服装、背景与预期完全一致。**`;
             }
 
-            // 关键：传递两张图片的URL数组
+            // 准备图片输入数组
             // 第一张：服装图片（what to wear）
             // 第二张：模特图片（who will wear）
+            // 第三张（可选）：口罩参考图片（mask reference）
+            const maskReferenceUrl = 'https://png.pngtree.com/png-clipart/20200826/ourmid/pngtree-3d-stereo-white-medical-mask-element-png-image_2332283.jpg';
+            const imageInputs = wearingMask
+                ? [clothingImageUrl, modelImageUrl, maskReferenceUrl]
+                : [clothingImageUrl, modelImageUrl];
+
+            if (wearingMask) {
+                console.log(`😷 Mask Reference added: ${maskReferenceUrl}`);
+            }
+
             const taskId = useProModel
                 ? await this.createProTask(
                     prompt,
-                    [clothingImageUrl, modelImageUrl],
+                    imageInputs,
                     '9:16',
                     '2K'
                 )
                 : await this.createTask(
                     prompt,
-                    [clothingImageUrl, modelImageUrl],
+                    imageInputs,
                     '9:16',
                     'google/nano-banana-edit'
                 );
