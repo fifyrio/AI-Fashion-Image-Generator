@@ -1217,86 +1217,91 @@ export default function Home() {
 
         const successResults = results.filter(r => r.success && r.imageUrl);
 
-        // 批量增强所有成功的图片
-        const enhanceTasks = successResults.map(async (result) => {
-          try {
-            // 更新状态为增强中
-            setModelPoseGeneratedImages(prev =>
-              prev.map(item =>
-                item.poseIndex === result.poseIndex
-                  ? { ...item, status: 'enhancing' as const }
-                  : item
-              )
-            );
+        // 先将所有成功的图片状态更新为增强中
+        setModelPoseGeneratedImages(prev =>
+          prev.map(item => {
+            const isInSuccessResults = successResults.some(r => r.poseIndex === item.poseIndex);
+            return isInSuccessResults
+              ? { ...item, status: 'enhancing' as const }
+              : item;
+          })
+        );
 
-            // 使用 Replicate 增强 API 处理图片
-            const enhanceResponse = await fetch('/api/enhance-image', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                imageUrl: result.imageUrl,
-                enhanceModel: imageEnhanceModel,
-                outputFormat: 'jpg',
-                upscaleFactor: imageEnhanceUpscale,
-                faceEnhancement: imageEnhanceFaceEnhancement,
-                subjectDetection: 'Foreground',
-                faceEnhancementStrength: imageEnhanceFaceStrength,
-                faceEnhancementCreativity: imageEnhanceFaceCreativity
-              })
+        try {
+          // 使用 iLoveIMG API 批量增强图片
+          const enhanceResponse = await fetch('/api/enhance-ilovepdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              images: successResults.map(r => ({ imageUrl: r.imageUrl })),
+              multiplier: 2 // 默认使用2x增强
+            })
+          });
+
+          if (!enhanceResponse.ok) {
+            const errorData = await enhanceResponse.json().catch(() => ({}));
+            throw new Error(errorData.error || 'Batch enhancement failed');
+          }
+
+          const enhanceData = await enhanceResponse.json();
+
+          // 根据返回结果更新每个图片的状态
+          if (enhanceData.results && Array.isArray(enhanceData.results)) {
+            enhanceData.results.forEach((result: { success: boolean; originalUrl: string; enhancedUrl?: string; error?: string }, index: number) => {
+              const originalResult = successResults[index];
+              if (!originalResult) return;
+
+              setModelPoseGeneratedImages(prev =>
+                prev.map(item => {
+                  if (item.poseIndex === originalResult.poseIndex) {
+                    if (result.success && result.enhancedUrl) {
+                      console.log(`✅ Enhancement completed for pose ${originalResult.poseIndex}`);
+                      return { ...item, enhancedUrl: result.enhancedUrl, status: 'enhanced' as const };
+                    } else {
+                      console.error(`❌ Enhancement failed for pose ${originalResult.poseIndex}:`, result.error);
+                      return { ...item, status: 'completed' as const };
+                    }
+                  }
+                  return item;
+                })
+              );
             });
 
-            if (!enhanceResponse.ok) {
-              const errorData = await enhanceResponse.json().catch(() => ({}));
-              throw new Error(errorData.error || 'Enhancement failed');
+            const enhanceSuccessCount = enhanceData.summary?.success || 0;
+            const enhanceFailCount = enhanceData.summary?.failed || 0;
+
+            if (enhanceFailCount > 0) {
+              setModelPoseError(
+                `批量生成完成：${successCount} 个成功，${failCount} 个失败。` +
+                `自动增强：${enhanceSuccessCount} 个成功，${enhanceFailCount} 个失败`
+              );
+            } else {
+              setModelPoseError(`批量生成和增强完成：${enhanceSuccessCount} 张图片已自动增强`);
             }
 
-            const enhanceData = await enhanceResponse.json();
-
-            const enhancedUrl = enhanceData.url;
-            if (!enhancedUrl) {
-              throw new Error(enhanceData.error || 'No enhanced image returned');
-            }
-
-            // 更新增强后的URL
-            setModelPoseGeneratedImages(prev =>
-              prev.map(item =>
-                item.poseIndex === result.poseIndex
-                  ? { ...item, enhancedUrl, status: 'enhanced' as const }
-                  : item
-              )
-            );
-            console.log(`✅ Enhancement completed for pose ${result.poseIndex}`);
-            return { poseIndex: result.poseIndex, success: true };
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Enhancement failed';
-            console.error(`❌ Enhancement failed for pose ${result.poseIndex}:`, errorMessage);
-
-            // 增强失败，但保持completed状态
-            setModelPoseGeneratedImages(prev =>
-              prev.map(item =>
-                item.poseIndex === result.poseIndex
-                  ? { ...item, status: 'completed' as const }
-                  : item
-              )
-            );
-            return { poseIndex: result.poseIndex, success: false };
+            console.log('✅ Auto-enhancement completed:', { enhanceSuccessCount, enhanceFailCount });
+          } else {
+            throw new Error('Invalid enhancement response format');
           }
-        });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Enhancement failed';
+          console.error('❌ Batch enhancement failed:', errorMessage);
 
-        const enhanceResults = await Promise.all(enhanceTasks);
-        const enhanceSuccessCount = enhanceResults.filter(r => r.success).length;
-        const enhanceFailCount = enhanceResults.filter(r => !r.success).length;
+          // 增强失败，将所有图片状态恢复为completed
+          setModelPoseGeneratedImages(prev =>
+            prev.map(item => {
+              const isInSuccessResults = successResults.some(r => r.poseIndex === item.poseIndex);
+              return isInSuccessResults && item.status === 'enhancing'
+                ? { ...item, status: 'completed' as const }
+                : item;
+            })
+          );
 
-        if (enhanceFailCount > 0) {
           setModelPoseError(
             `批量生成完成：${successCount} 个成功，${failCount} 个失败。` +
-            `自动增强：${enhanceSuccessCount} 个成功，${enhanceFailCount} 个失败`
+            `自动增强失败：${errorMessage}`
           );
-        } else {
-          setModelPoseError(`批量生成和增强完成：${enhanceSuccessCount} 张图片已自动增强`);
         }
-
-        console.log('✅ Auto-enhancement completed:', { enhanceSuccessCount, enhanceFailCount });
       }
     } catch (error) {
       setModelPoseError(error instanceof Error ? error.message : 'Batch generation failed');
@@ -3554,10 +3559,10 @@ export default function Home() {
                           <div className="bg-green-50 rounded-lg p-3 border border-green-300">
                             <p className="text-sm text-green-800">
                               <span className="font-semibold">增强方式：</span>
-                              人脸修复（GFPGAN）+ 超分辨率（Real-ESRGAN）
+                              iLoveIMG 画质增强 V3（2x 超分辨率）
                             </p>
                             <p className="text-xs text-green-700 mt-1">
-                              自动提升画质、修复人脸细节，并进行图像超分辨率处理
+                              使用 iLoveIMG 专业图像增强服务，自动提升画质和细节清晰度
                             </p>
                           </div>
                         </div>
