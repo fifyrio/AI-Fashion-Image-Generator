@@ -72,7 +72,7 @@ const IMAGE_ENHANCE_UPSCALE_OPTIONS = ['2x', '4x', '6x'] as const;
 type ImageEnhanceModel = (typeof IMAGE_ENHANCE_MODELS)[number];
 type ImageEnhanceUpscale = (typeof IMAGE_ENHANCE_UPSCALE_OPTIONS)[number];
 
-type TabType = 'outfit-change' | 'scene-pose' | 'model-pose' | 'model-generation' | 'image-enhance' | 'image-enhance-v2' | 'outfit-change-v2' | 'mimic-reference' | 'copywriting' | 'pants-closeup' | 'anime-cover';
+type TabType = 'outfit-change' | 'scene-pose' | 'model-pose' | 'model-generation' | 'image-enhance' | 'image-enhance-v2' | 'image-enhance-v3' | 'outfit-change-v2' | 'mimic-reference' | 'copywriting' | 'pants-closeup' | 'anime-cover';
 
 interface ScenePoseSuggestion {
   scene: string;
@@ -276,6 +276,20 @@ export default function Home() {
   const [enhanceV2Error, setEnhanceV2Error] = useState('');
   const [enhanceV2SkipEsrgan, setEnhanceV2SkipEsrgan] = useState(false);
   const enhanceV2FileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Image Enhance V3 states (using ilovepdf API)
+  const [enhanceV3Files, setEnhanceV3Files] = useState<File[]>([]);
+  const [enhanceV3Previews, setEnhanceV3Previews] = useState<string[]>([]);
+  const [enhanceV3Results, setEnhanceV3Results] = useState<Array<{
+    originalUrl: string;
+    enhancedUrl?: string;
+    status: 'pending' | 'enhancing' | 'enhanced' | 'error';
+    error?: string;
+  }>>([]);
+  const [enhanceV3Processing, setEnhanceV3Processing] = useState(false);
+  const [enhanceV3Error, setEnhanceV3Error] = useState('');
+  const [enhanceV3Multiplier, setEnhanceV3Multiplier] = useState<2 | 4>(2);
+  const enhanceV3FileInputRef = useRef<HTMLInputElement | null>(null);
 
   const clearMockProgressTimers = () => {
     if (progressIntervalRef.current) {
@@ -2632,6 +2646,19 @@ export default function Home() {
               <div className="flex items-center justify-center gap-2">
                 <span className="text-lg">✨</span>
                 <span>画质增强V2</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('image-enhance-v3')}
+              className={`flex-1 px-4 py-3 text-sm font-semibold transition-all ${
+                activeTab === 'image-enhance-v3'
+                  ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-lg">🔥</span>
+                <span>画质增强V3</span>
               </div>
             </button>
             <button
@@ -6083,6 +6110,336 @@ export default function Home() {
                           >
                             下载增强图片
                           </a>
+                        </div>
+                      )
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'image-enhance-v3' && (
+            <div className="space-y-6">
+              <div className="bg-gradient-to-r from-orange-50 to-red-50 rounded-lg p-6 border border-orange-200">
+                <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  <span className="text-3xl">🔥</span>
+                  <span>图像画质增强 V3</span>
+                  <span className="px-2 py-0.5 bg-orange-500 text-white text-xs font-bold rounded-full">ilovepdf</span>
+                </h2>
+                <p className="text-gray-700 mb-3">
+                  使用 ilovepdf 专业 API 进行图像超清放大，支持 2x 和 4x 倍数选择
+                </p>
+                <div className="bg-white rounded-lg p-4 border border-orange-300">
+                  <h3 className="font-semibold text-orange-800 mb-2">增强特性：</h3>
+                  <ul className="text-sm text-gray-700 space-y-1">
+                    <li>✅ 2x/4x 超高清放大</li>
+                    <li>✅ 专业级画质增强</li>
+                    <li>✅ 批量处理支持</li>
+                    <li>✅ 快速云端处理</li>
+                  </ul>
+                </div>
+              </div>
+
+              {/* Upload Section */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-semibold text-gray-700">上传图片</h3>
+                  {enhanceV3Files.length > 0 && (
+                    <button
+                      onClick={() => {
+                        setEnhanceV3Files([]);
+                        setEnhanceV3Previews([]);
+                        setEnhanceV3Results([]);
+                        setEnhanceV3Error('');
+                      }}
+                      className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white font-medium px-4 py-2 rounded-lg transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      清除所有
+                    </button>
+                  )}
+                </div>
+
+                {/* File Upload Area */}
+                {enhanceV3Files.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 hover:bg-gray-100 transition-all">
+                    <label
+                      htmlFor="enhance-v3-upload"
+                      className="flex flex-col items-center justify-center w-full h-full cursor-pointer"
+                    >
+                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                        <svg
+                          className="w-16 h-16 mb-4 text-gray-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                          />
+                        </svg>
+                        <div className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-semibold py-3 px-8 rounded-lg mb-4">
+                          <div className="flex items-center gap-2">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            </svg>
+                            上传图片
+                          </div>
+                        </div>
+                        <p className="text-sm text-gray-500">点击上传或拖拽图片到此处</p>
+                        <p className="text-xs text-gray-400 mt-1">支持批量上传，推荐每张不超过10MB</p>
+                      </div>
+                    </label>
+                    <input
+                      id="enhance-v3-upload"
+                      ref={enhanceV3FileInputRef}
+                      type="file"
+                      className="hidden"
+                      accept="image/*"
+                      multiple
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files || []);
+                        if (files.length > 0) {
+                          setEnhanceV3Files(files);
+                          const previews = files.map(file => URL.createObjectURL(file));
+                          setEnhanceV3Previews(previews);
+                          setEnhanceV3Results(files.map(() => ({ originalUrl: '', status: 'pending' as const })));
+                        }
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Preview Grid */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {enhanceV3Previews.map((preview, index) => (
+                        <div key={index} className="relative group">
+                          <div className="relative w-full h-48 bg-gray-100 rounded-lg overflow-hidden">
+                            <Image
+                              src={preview}
+                              alt={`Preview ${index + 1}`}
+                              fill
+                              className="object-cover"
+                              unoptimized
+                            />
+                          </div>
+                          <div className="mt-2 text-xs text-gray-600 truncate">
+                            {enhanceV3Files[index]?.name}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Multiplier Selector */}
+                    <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-4 border border-purple-200">
+                      <h3 className="font-semibold text-gray-800 mb-3">选择放大倍数</h3>
+                      <div className="flex gap-4">
+                        <label className="flex-1">
+                          <input
+                            type="radio"
+                            name="multiplier"
+                            value={2}
+                            checked={enhanceV3Multiplier === 2}
+                            onChange={() => setEnhanceV3Multiplier(2)}
+                            className="sr-only peer"
+                          />
+                          <div className="cursor-pointer border-2 rounded-lg p-4 text-center transition-all peer-checked:border-purple-500 peer-checked:bg-purple-100 hover:border-purple-300 border-gray-300">
+                            <div className="text-2xl font-bold text-purple-600">2x</div>
+                            <div className="text-sm text-gray-600">标准增强</div>
+                          </div>
+                        </label>
+                        <label className="flex-1">
+                          <input
+                            type="radio"
+                            name="multiplier"
+                            value={4}
+                            checked={enhanceV3Multiplier === 4}
+                            onChange={() => setEnhanceV3Multiplier(4)}
+                            className="sr-only peer"
+                          />
+                          <div className="cursor-pointer border-2 rounded-lg p-4 text-center transition-all peer-checked:border-purple-500 peer-checked:bg-purple-100 hover:border-purple-300 border-gray-300">
+                            <div className="text-2xl font-bold text-purple-600">4x</div>
+                            <div className="text-sm text-gray-600">超清增强</div>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Process Button */}
+                    <button
+                      onClick={async () => {
+                        setEnhanceV3Processing(true);
+                        setEnhanceV3Error('');
+
+                        try {
+                          // Upload all files to R2 first
+                          const uploadPromises = enhanceV3Files.map(async (file) => {
+                            const formData = new FormData();
+                            formData.append('files', file);
+                            const response = await fetch('/api/upload', { method: 'POST', body: formData });
+                            const data = await response.json();
+
+                            if (!response.ok) {
+                              throw new Error(data.error || '上传失败');
+                            }
+
+                            const firstUpload = data.uploaded?.[0];
+                            if (!firstUpload?.url) {
+                              throw new Error('上传结果缺少 URL');
+                            }
+
+                            return firstUpload.url as string;
+                          });
+
+                          const uploadedUrls = await Promise.all(uploadPromises);
+
+                          // Update results with original URLs
+                          setEnhanceV3Results(prev =>
+                            prev.map((r, idx) => ({
+                              ...r,
+                              originalUrl: enhanceV3Previews[idx],
+                              status: 'enhancing' as const
+                            }))
+                          );
+
+                          // Call enhance API
+                          const response = await fetch('/api/enhance-ilovepdf', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              images: uploadedUrls.map(url => ({ imageUrl: url })),
+                              multiplier: enhanceV3Multiplier
+                            })
+                          });
+
+                          if (!response.ok) {
+                            const errorData = await response.json().catch(() => ({}));
+                            throw new Error(errorData.error || '增强失败');
+                          }
+
+                          const data = await response.json();
+
+                          // Update results
+                          setEnhanceV3Results(data.results.map((r: { success: boolean; originalUrl: string; enhancedUrl?: string; error?: string }, i: number) => ({
+                            originalUrl: enhanceV3Previews[i],
+                            enhancedUrl: r.enhancedUrl,
+                            status: r.success ? 'enhanced' as const : 'error' as const,
+                            error: r.error
+                          })));
+
+                        } catch (error) {
+                          const errorMessage = error instanceof Error ? error.message : 'Processing failed';
+                          setEnhanceV3Error(errorMessage);
+                          console.error('Enhancement V3 error:', error);
+                        } finally {
+                          setEnhanceV3Processing(false);
+                        }
+                      }}
+                      disabled={enhanceV3Processing}
+                      className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100"
+                    >
+                      {enhanceV3Processing ? (
+                        <div className="flex items-center justify-center gap-3">
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                          <span>处理中...</span>
+                        </div>
+                      ) : (
+                        `增强图片 (${enhanceV3Files.length} 张 · ${enhanceV3Multiplier}x)`
+                      )}
+                    </button>
+
+                    {/* Error Message */}
+                    {enhanceV3Error && (
+                      <div className="p-4 rounded-lg bg-red-100 text-red-800">
+                        {enhanceV3Error}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Results Section */}
+              {enhanceV3Results.some(r => r.enhancedUrl) && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xl font-semibold text-gray-700">增强结果</h3>
+                    <div className="flex gap-2 text-sm">
+                      <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full font-medium">
+                        成功: {enhanceV3Results.filter(r => r.status === 'enhanced').length}
+                      </span>
+                      {enhanceV3Results.some(r => r.status === 'error') && (
+                        <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full font-medium">
+                          失败: {enhanceV3Results.filter(r => r.status === 'error').length}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {enhanceV3Results.map((result, index) => (
+                      (result.enhancedUrl || result.error) && (
+                        <div key={index} className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-semibold text-gray-700">图片 {index + 1}</h4>
+                            {result.status === 'enhanced' && (
+                              <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded">
+                                {enhanceV3Multiplier}x 增强
+                              </span>
+                            )}
+                            {result.status === 'error' && (
+                              <span className="px-2 py-1 bg-red-100 text-red-800 text-xs font-medium rounded">
+                                失败
+                              </span>
+                            )}
+                          </div>
+                          {result.enhancedUrl ? (
+                            <>
+                              <div className="grid grid-cols-2 gap-3">
+                                {/* Original */}
+                                <div>
+                                  <p className="text-xs text-gray-500 mb-2">原图</p>
+                                  <div className="relative w-full h-48 bg-gray-100 rounded-lg overflow-hidden">
+                                    <Image
+                                      src={result.originalUrl}
+                                      alt="Original"
+                                      fill
+                                      className="object-cover"
+                                      unoptimized
+                                    />
+                                  </div>
+                                </div>
+                                {/* Enhanced */}
+                                <div>
+                                  <p className="text-xs text-gray-500 mb-2">增强后 🔥</p>
+                                  <div className="relative w-full h-48 bg-gray-100 rounded-lg overflow-hidden">
+                                    <Image
+                                      src={result.enhancedUrl}
+                                      alt="Enhanced"
+                                      fill
+                                      className="object-cover"
+                                      unoptimized
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                              <a
+                                href={result.enhancedUrl}
+                                download
+                                className="block w-full text-center bg-purple-500 hover:bg-purple-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+                              >
+                                下载增强图片
+                              </a>
+                            </>
+                          ) : (
+                            <div className="p-4 rounded-lg bg-red-50 text-red-700 text-sm">
+                              {result.error || '增强失败'}
+                            </div>
+                          )}
                         </div>
                       )
                     ))}
