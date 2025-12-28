@@ -179,7 +179,7 @@ export default function Home() {
   const [outfitV2UnzipJacket, setOutfitV2UnzipJacket] = useState(false);
   const [outfitV2AdjustPose, setOutfitV2AdjustPose] = useState(false);
   const [outfitV2UseProModel, setOutfitV2UseProModel] = useState(false);
-  const [outfitV2WearingMask, setOutfitV2WearingMask] = useState(false);
+  const [outfitV2WearingMask, setOutfitV2WearingMask] = useState(true);
 
   // 当前阶段
   type OutfitV2Stage = 'upload' | 'extracting' | 'extracted' | 'generating' | 'completed';
