@@ -175,6 +175,7 @@ export default function Home() {
   const [outfitV2Error, setOutfitV2Error] = useState<string>('');
   const [outfitV2IsDragging, setOutfitV2IsDragging] = useState(false);
   const [outfitV2RecommendMatch, setOutfitV2RecommendMatch] = useState(false);
+  const [outfitV2RecommendShirt, setOutfitV2RecommendShirt] = useState(false);
   const [outfitV2ExtractTopOnly, setOutfitV2ExtractTopOnly] = useState(false);
   const [outfitV2UnzipJacket, setOutfitV2UnzipJacket] = useState(false);
   const [outfitV2AdjustPose, setOutfitV2AdjustPose] = useState(false);
@@ -1448,6 +1449,7 @@ export default function Home() {
           body: JSON.stringify({
             imageUrl: url,
             recommendMatch: outfitV2RecommendMatch,
+            recommendShirt: outfitV2RecommendShirt,
             extractTopOnly: outfitV2ExtractTopOnly,
             unzipJacket: outfitV2UnzipJacket
           }),
@@ -4574,6 +4576,31 @@ export default function Home() {
                             </div>
                             <p className="text-sm text-gray-600 mt-1">
                               开启后，AI 会根据提取的服装智能推荐搭配的裤子或上衣
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+
+                      {/* Recommend Shirt for Outerwear Option */}
+                      <div className="bg-gradient-to-r from-pink-50 to-rose-50 rounded-lg p-4 border border-pink-200">
+                        <label className="flex items-center cursor-pointer group">
+                          <div className="relative">
+                            <input
+                              type="checkbox"
+                              checked={outfitV2RecommendShirt}
+                              onChange={(e) => setOutfitV2RecommendShirt(e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-pink-500 peer-focus:ring-4 peer-focus:ring-pink-300 transition-all"></div>
+                            <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                          </div>
+                          <div className="ml-3 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">👔🧥</span>
+                              <span className="font-semibold text-gray-800">推荐外套对应的搭配衬衣</span>
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1">
+                              开启后，提取外套时 AI 会智能推荐搭配的内搭衬衣
                             </p>
                           </div>
                         </label>

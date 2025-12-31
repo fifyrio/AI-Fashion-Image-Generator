@@ -1,6 +1,6 @@
 import { ImageGenerationResult } from './types';
 import { saveKIETaskMetadata } from './r2';
-import { IMAGE_GENERATION_BASE64_PROMPT, IMAGE_GENERATION_BASE64_TOP_ONLY_PROMPT, EXTRACT_CLOTHING_PROMPT, EXTRACT_CLOTHING_UNZIP_PROMPT, EXTRACT_CLOTHING_TOP_ONLY_PROMPT, EXTRACT_CLOTHING_WITH_MATCH_PROMPT, OUTFIT_CHANGE_V2_PROMPT } from './prompts';
+import { IMAGE_GENERATION_BASE64_PROMPT, IMAGE_GENERATION_BASE64_TOP_ONLY_PROMPT, EXTRACT_CLOTHING_PROMPT, EXTRACT_CLOTHING_UNZIP_PROMPT, EXTRACT_CLOTHING_TOP_ONLY_PROMPT, EXTRACT_CLOTHING_WITH_MATCH_PROMPT, EXTRACT_CLOTHING_WITH_SHIRT_PROMPT, OUTFIT_CHANGE_V2_PROMPT } from './prompts';
 
 // KIE API 响应类型
 interface KIECreateTaskResponse {
@@ -649,6 +649,7 @@ export class KIEImageService {
      * 提取服装（去除模特）
      * @param imageUrl 原始图片URL
      * @param recommendMatch 是否推荐搭配的裤子或上衣
+     * @param recommendShirt 是否推荐搭配的内搭衬衣
      * @param extractTopOnly 是否只提取上装
      * @param unzipJacket 是否强制外套敞开（不拉拉链、不扣纽扣）
      * @returns 包含 taskId 的生成结果
@@ -656,6 +657,7 @@ export class KIEImageService {
     async extractClothing(
         imageUrl: string,
         recommendMatch: boolean = false,
+        recommendShirt: boolean = false,
         extractTopOnly: boolean = false,
         unzipJacket: boolean = false
     ): Promise<ImageGenerationResult & { taskId?: string }> {
@@ -665,16 +667,20 @@ export class KIEImageService {
             console.log('👔 Starting KIE clothing extraction (async)...');
             console.log(`🖼️  Image URL: ${imageUrl}`);
             console.log(`🎯 Recommend Match: ${recommendMatch}`);
+            console.log(`👔 Recommend Shirt: ${recommendShirt}`);
             console.log(`👕 Extract Top Only: ${extractTopOnly}`);
             console.log(`🧥 Unzip Jacket: ${unzipJacket}`);
 
-            // 根据 extractTopOnly、recommendMatch 和 unzipJacket 选择不同的 prompt
+            // 根据 extractTopOnly、recommendMatch、recommendShirt 和 unzipJacket 选择不同的 prompt
             let prompt: string;
             let promptType: string;
 
             if (extractTopOnly) {
                 prompt = EXTRACT_CLOTHING_TOP_ONLY_PROMPT;
                 promptType = 'TOP_ONLY';
+            } else if (recommendShirt) {
+                prompt = EXTRACT_CLOTHING_WITH_SHIRT_PROMPT;
+                promptType = 'WITH_SHIRT';
             } else if (recommendMatch) {
                 prompt = EXTRACT_CLOTHING_WITH_MATCH_PROMPT;
                 promptType = 'WITH_MATCH';
