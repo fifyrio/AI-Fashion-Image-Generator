@@ -1,6 +1,6 @@
 import { ImageGenerationResult } from './types';
 import { saveKIETaskMetadata } from './r2';
-import { IMAGE_GENERATION_BASE64_PROMPT, IMAGE_GENERATION_BASE64_TOP_ONLY_PROMPT, EXTRACT_CLOTHING_PROMPT, EXTRACT_CLOTHING_UNZIP_PROMPT, EXTRACT_CLOTHING_TOP_ONLY_PROMPT, EXTRACT_CLOTHING_WITH_MATCH_PROMPT, OUTFIT_CHANGE_V2_PROMPT } from './prompts';
+import { IMAGE_GENERATION_BASE64_PROMPT, IMAGE_GENERATION_BASE64_TOP_ONLY_PROMPT, EXTRACT_CLOTHING_PROMPT, EXTRACT_CLOTHING_UNZIP_PROMPT, EXTRACT_CLOTHING_TOP_ONLY_PROMPT, EXTRACT_CLOTHING_WITH_MATCH_PROMPT, EXTRACT_CLOTHING_WITH_SHIRT_PROMPT, OUTFIT_CHANGE_V2_PROMPT } from './prompts';
 
 // KIE API 响应类型
 interface KIECreateTaskResponse {
@@ -649,6 +649,7 @@ export class KIEImageService {
      * 提取服装（去除模特）
      * @param imageUrl 原始图片URL
      * @param recommendMatch 是否推荐搭配的裤子或上衣
+     * @param recommendShirt 是否推荐搭配的内搭衬衣
      * @param extractTopOnly 是否只提取上装
      * @param unzipJacket 是否强制外套敞开（不拉拉链、不扣纽扣）
      * @returns 包含 taskId 的生成结果
@@ -656,6 +657,7 @@ export class KIEImageService {
     async extractClothing(
         imageUrl: string,
         recommendMatch: boolean = false,
+        recommendShirt: boolean = false,
         extractTopOnly: boolean = false,
         unzipJacket: boolean = false
     ): Promise<ImageGenerationResult & { taskId?: string }> {
@@ -665,16 +667,20 @@ export class KIEImageService {
             console.log('👔 Starting KIE clothing extraction (async)...');
             console.log(`🖼️  Image URL: ${imageUrl}`);
             console.log(`🎯 Recommend Match: ${recommendMatch}`);
+            console.log(`👔 Recommend Shirt: ${recommendShirt}`);
             console.log(`👕 Extract Top Only: ${extractTopOnly}`);
             console.log(`🧥 Unzip Jacket: ${unzipJacket}`);
 
-            // 根据 extractTopOnly、recommendMatch 和 unzipJacket 选择不同的 prompt
+            // 根据 extractTopOnly、recommendMatch、recommendShirt 和 unzipJacket 选择不同的 prompt
             let prompt: string;
             let promptType: string;
 
             if (extractTopOnly) {
                 prompt = EXTRACT_CLOTHING_TOP_ONLY_PROMPT;
                 promptType = 'TOP_ONLY';
+            } else if (recommendShirt) {
+                prompt = EXTRACT_CLOTHING_WITH_SHIRT_PROMPT;
+                promptType = 'WITH_SHIRT';
             } else if (recommendMatch) {
                 prompt = EXTRACT_CLOTHING_WITH_MATCH_PROMPT;
                 promptType = 'WITH_MATCH';
@@ -757,20 +763,18 @@ export class KIEImageService {
             // 使用换装V2的 prompt
             let prompt = OUTFIT_CHANGE_V2_PROMPT;
 
-            // 如果开启口罩功能，添加口罩要求到基础prompt
-            if (wearingMask && !adjustPose) {
-                prompt = prompt + `\n\n🎭 【口罩要求 - 最高优先级】：
-模特必须佩戴口罩，口罩样式严格参考第三张输入图片（口罩参考图）：
-- 📸 **完全按照参考图片中的口罩样式生成**：颜色、形状、褶皱、材质必须与参考图片完全一致
-- ✅ **真实感要求**：
-  * 口罩要有自然的立体感和褶皱纹理
-  * 口罩边缘要自然贴合面部轮廓
-  * 金属鼻梁条要有真实的金属光泽和微微弯曲的弧度
-  * 耳挂绳要自然挂在耳朵上，有轻微的拉伸感
-  * 口罩表面要有无纺布材质的细腻质感
-  * 光线照射在口罩上要有自然的明暗变化和阴影
-- ✅ **佩戴规范**：口罩要正确规范佩戴，完全覆盖口鼻，紧贴面部，无缝隙
-- ✅ **一致性**：所有图片中的口罩必须保持完全一致的样式、颜色、形状、质感`;
+            // 如果开启口罩功能，添加口罩要求到基础prompt（无论是否开启动作微调）
+            if (wearingMask) {
+                prompt = prompt + `\n\n😷 【口罩要求 - 最高优先级 - 覆盖所有其他面部配饰规则】：
+⚠️ **重要：无论第二张图片（模特图）中是否佩戴口罩，生成的图片中模特必须佩戴口罩**
+⚠️ **口罩样式严格参考第三张输入图片（口罩参考图），不是参考第二张模特图**
+
+模特必须佩戴口罩，具体要求如下：
+- ✅ **完全按照第三张参考图片中的口罩样式生成**：包括颜色、形状、立体褶皱、材质、金属鼻梁条、耳挂绳等所有细节必须与第三张参考图片完全一致
+- ✅ **真实的医用无纺布质感**：依照参考图片展现真实的材质、光影、褶皱深度
+- ✅ **佩戴规范**：口罩完全覆盖口鼻，上缘贴合鼻梁，下缘覆盖下巴，紧贴面部无缝隙
+- ✅ **一致性**：所有图片中的口罩样式必须与第三张参考图片保持完全一致
+- ✅ **强制要求**：即使第二张图片的模特没有戴口罩，生成的图片中也必须添加口罩`;
             }
 
             // 如果开启动作微调则添加相关提示
@@ -856,7 +860,7 @@ ${wearingMask ? `5. **面部配饰**：模特佩戴口罩（口罩样式严格�
             // 第一张：服装图片（what to wear）
             // 第二张：模特图片（who will wear）
             // 第三张（可选）：口罩参考图片（mask reference）
-            const maskReferenceUrl = 'https://png.pngtree.com/png-clipart/20200826/ourmid/pngtree-3d-stereo-white-medical-mask-element-png-image_2332283.jpg';
+            const maskReferenceUrl = 'https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/mask/white-mask.png';
             const imageInputs = wearingMask
                 ? [clothingImageUrl, modelImageUrl, maskReferenceUrl]
                 : [clothingImageUrl, modelImageUrl];
