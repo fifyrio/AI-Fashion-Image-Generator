@@ -290,6 +290,7 @@ export default function Home() {
   const [enhanceV3Processing, setEnhanceV3Processing] = useState(false);
   const [enhanceV3Error, setEnhanceV3Error] = useState('');
   const [enhanceV3Multiplier, setEnhanceV3Multiplier] = useState<2 | 4>(2);
+  const [isDraggingEnhanceV3, setIsDraggingEnhanceV3] = useState(false);
   const enhanceV3FileInputRef = useRef<HTMLInputElement | null>(null);
 
   const clearMockProgressTimers = () => {
@@ -677,6 +678,40 @@ export default function Home() {
 
     const files = e.dataTransfer.files;
     processFiles(files);
+  };
+
+  // 画质增强V3 拖拽处理函数
+  const handleEnhanceV3DragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingEnhanceV3(true);
+  };
+
+  const handleEnhanceV3DragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingEnhanceV3(false);
+  };
+
+  const handleEnhanceV3DragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleEnhanceV3Drop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingEnhanceV3(false);
+
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    const imageFiles = droppedFiles.filter(file => file.type.startsWith('image/'));
+
+    if (imageFiles.length > 0) {
+      setEnhanceV3Files(imageFiles);
+      const previews = imageFiles.map(file => URL.createObjectURL(file));
+      setEnhanceV3Previews(previews);
+      setEnhanceV3Results(imageFiles.map(() => ({ originalUrl: '', status: 'pending' as const })));
+    }
   };
 
   const removeFile = (index: number) => {
@@ -6197,7 +6232,17 @@ export default function Home() {
 
                 {/* File Upload Area */}
                 {enhanceV3Files.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 hover:bg-gray-100 transition-all">
+                  <div
+                    className={`flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg transition-all ${
+                      isDraggingEnhanceV3
+                        ? 'border-orange-500 bg-orange-50'
+                        : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
+                    }`}
+                    onDragEnter={handleEnhanceV3DragEnter}
+                    onDragLeave={handleEnhanceV3DragLeave}
+                    onDragOver={handleEnhanceV3DragOver}
+                    onDrop={handleEnhanceV3Drop}
+                  >
                     <label
                       htmlFor="enhance-v3-upload"
                       className="flex flex-col items-center justify-center w-full h-full cursor-pointer"
