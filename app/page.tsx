@@ -163,7 +163,12 @@ export default function Home() {
   // 批量换装结果（对应每个服装）
   const [outfitV2SelectedCharacters, setOutfitV2SelectedCharacters] = useState<string[]>([]);
   const [outfitV2GeneratedImages, setOutfitV2GeneratedImages] = useState<{
-    [index: number]: { url: string; status: 'generating' | 'completed' | 'failed'; error?: string };
+    [index: number]: {
+      url: string;
+      enhancedUrl?: string;
+      status: 'generating' | 'completed' | 'enhancing' | 'enhanced' | 'failed';
+      error?: string;
+    };
   }>({});
 
   const [outfitV2Generating, setOutfitV2Generating] = useState(false);
@@ -181,6 +186,7 @@ export default function Home() {
   const [outfitV2AdjustPose, setOutfitV2AdjustPose] = useState(false);
   const [outfitV2UseProModel, setOutfitV2UseProModel] = useState(false);
   const [outfitV2WearingMask, setOutfitV2WearingMask] = useState(true);
+  const [outfitV2AutoEnhance, setOutfitV2AutoEnhance] = useState(true);
 
   // 当前阶段
   type OutfitV2Stage = 'upload' | 'extracting' | 'extracted' | 'generating' | 'completed';
@@ -1632,6 +1638,64 @@ export default function Home() {
     }
   };
 
+  // 实时增强单张换装图片
+  const enhanceOutfitV2Image = async (index: number, imageUrl: string) => {
+    console.log(`🔄 Starting enhancement for outfit #${index + 1}: ${imageUrl}`);
+
+    // 更新状态为增强中
+    setOutfitV2GeneratedImages(prev => ({
+      ...prev,
+      [index]: { ...prev[index], status: 'enhancing' }
+    }));
+
+    try {
+      const enhanceResponse = await fetch('/api/enhance-ilovepdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          images: [{ imageUrl }],
+          multiplier: 2
+        })
+      });
+
+      if (!enhanceResponse.ok) {
+        const errorData = await enhanceResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Enhancement failed');
+      }
+
+      const enhanceData = await enhanceResponse.json();
+
+      if (enhanceData.results?.[0]?.success && enhanceData.results[0].enhancedUrl) {
+        // 增强成功
+        const enhancedUrl = enhanceData.results[0].enhancedUrl;
+        console.log(`✅ Enhancement completed for outfit #${index + 1}: ${enhancedUrl}`);
+
+        setOutfitV2GeneratedImages(prev => ({
+          ...prev,
+          [index]: {
+            ...prev[index],
+            enhancedUrl,
+            status: 'enhanced'
+          }
+        }));
+      } else {
+        throw new Error(enhanceData.results?.[0]?.error || 'Enhancement failed');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Enhancement failed';
+      console.error(`❌ Enhancement failed for outfit #${index + 1}:`, errorMessage);
+
+      // 增强失败，恢复为completed状态（保留原图）
+      setOutfitV2GeneratedImages(prev => ({
+        ...prev,
+        [index]: {
+          ...prev[index],
+          status: 'completed'
+        }
+      }));
+    }
+  };
+
   const handleOutfitV2Generate = async () => {
     // 检查是否有选中的服装
     const selectedClothingIndexes = Array.from(outfitV2SelectedClothing);
@@ -1733,6 +1797,14 @@ export default function Home() {
           }));
 
           console.log(`✅ 服装 #${index + 1} 换装完成`);
+
+          // 如果开启了自动增强，立即触发增强
+          if (outfitV2AutoEnhance) {
+            enhanceOutfitV2Image(index, generatedUrl).catch(err => {
+              console.error(`Enhancement error for outfit #${index + 1}:`, err);
+            });
+          }
+
           return { index, success: true, url: generatedUrl };
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : '换装失败';
@@ -4794,12 +4866,78 @@ export default function Home() {
 
                           {/* Generation Status */}
                           {outfitV2GeneratedImages[index] && (
-                            <div className="relative w-full bg-gray-100 rounded-lg overflow-hidden border-2 border-purple-500" style={{ aspectRatio: '3 / 4' }}>
+                            <div className={`relative w-full bg-gray-100 rounded-lg overflow-hidden border-2 ${
+                              outfitV2GeneratedImages[index].status === 'enhanced' ? 'border-emerald-500' :
+                              outfitV2GeneratedImages[index].status === 'enhancing' ? 'border-blue-500' :
+                              outfitV2GeneratedImages[index].status === 'completed' ? 'border-purple-500' :
+                              'border-gray-300'
+                            }`} style={{ aspectRatio: '3 / 4' }}>
+                              {/* Generating state */}
                               {outfitV2GeneratedImages[index].status === 'generating' && (
                                 <div className="absolute inset-0 flex items-center justify-center bg-black/50">
                                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
                                 </div>
                               )}
+
+                              {/* Enhancing state */}
+                              {outfitV2GeneratedImages[index].status === 'enhancing' && (
+                                <>
+                                  <Image
+                                    src={outfitV2GeneratedImages[index].url}
+                                    alt={`换装结果 ${index + 1}`}
+                                    fill
+                                    className="object-cover opacity-50 blur-sm"
+                                    unoptimized
+                                  />
+                                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-blue-500/20">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
+                                    <div className="bg-blue-600 text-white text-xs px-3 py-1 rounded-full font-medium">
+                                      正在增强画质...
+                                    </div>
+                                  </div>
+                                </>
+                              )}
+
+                              {/* Enhanced state */}
+                              {outfitV2GeneratedImages[index].status === 'enhanced' && (
+                                <>
+                                  <Image
+                                    src={outfitV2GeneratedImages[index].enhancedUrl || outfitV2GeneratedImages[index].url}
+                                    alt={`换装结果 ${index + 1} (增强版)`}
+                                    fill
+                                    className="object-cover"
+                                    unoptimized
+                                  />
+                                  <div className="absolute top-2 left-2 bg-emerald-500 text-white text-xs px-2 py-1 rounded font-medium flex items-center gap-1">
+                                    <span>✨</span>
+                                    <span>增强版</span>
+                                  </div>
+                                  <div className="absolute bottom-2 left-2 bg-emerald-500 text-white text-xs px-2 py-1 rounded">
+                                    ✅ 已换装 + 已增强
+                                  </div>
+                                  {/* Download button - downloads enhanced version */}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const a = document.createElement('a');
+                                      const downloadUrl = `/api/download?url=${encodeURIComponent(outfitV2GeneratedImages[index].enhancedUrl || outfitV2GeneratedImages[index].url)}&filename=outfit-v2-enhanced-${index + 1}.png`;
+                                      a.href = downloadUrl;
+                                      a.download = `outfit-v2-enhanced-${index + 1}.png`;
+                                      document.body.appendChild(a);
+                                      a.click();
+                                      document.body.removeChild(a);
+                                    }}
+                                    className="absolute top-2 right-2 bg-white/90 hover:bg-white text-gray-700 hover:text-emerald-600 rounded-full p-1.5 shadow-md transition-all"
+                                    title="下载增强版图片"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                  </button>
+                                </>
+                              )}
+
+                              {/* Completed state (not enhanced or enhancement failed) */}
                               {outfitV2GeneratedImages[index].status === 'completed' && (
                                 <>
                                   <Image
@@ -4812,7 +4950,7 @@ export default function Home() {
                                   <div className="absolute bottom-2 left-2 bg-purple-500 text-white text-xs px-2 py-1 rounded">
                                     ✅ 已换装
                                   </div>
-                                  {/* Download button */}
+                                  {/* Download button - downloads original */}
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -4833,6 +4971,8 @@ export default function Home() {
                                   </button>
                                 </>
                               )}
+
+                              {/* Failed state */}
                               {outfitV2GeneratedImages[index].status === 'failed' && (
                                 <div className="absolute inset-0 flex items-center justify-center bg-red-100 text-red-600 text-xs p-2 text-center">
                                   ❌ {outfitV2GeneratedImages[index].error || '换装失败'}
@@ -5029,6 +5169,46 @@ export default function Home() {
                       </label>
                     </div>
 
+                    {/* 自动图像增强开关 */}
+                    <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-4 border border-green-200">
+                      <label className="flex items-center cursor-pointer group">
+                        <div className="relative">
+                          <input
+                            type="checkbox"
+                            checked={outfitV2AutoEnhance}
+                            onChange={(e) => setOutfitV2AutoEnhance(e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-green-500 peer-focus:ring-4 peer-focus:ring-green-300 transition-all"></div>
+                          <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                        </div>
+                        <div className="ml-3 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">✨</span>
+                            <span className="font-semibold text-gray-800">自动图像增强</span>
+                            <span className="px-2 py-0.5 bg-green-500 text-white text-xs font-bold rounded-full">推荐</span>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-1">
+                            每张换装图生成完成后立即自动增强，提升画质和细节清晰度
+                          </p>
+                        </div>
+                      </label>
+
+                      {outfitV2AutoEnhance && (
+                        <div className="mt-4 pt-4 border-t border-green-200">
+                          <div className="bg-green-50 rounded-lg p-3 border border-green-300">
+                            <p className="text-sm text-green-800">
+                              <span className="font-semibold">增强方式：</span>
+                              iLoveIMG 画质增强 V3（2x 超分辨率）
+                            </p>
+                            <p className="text-xs text-green-700 mt-1">
+                              实时增强：每张图生成完成后立即增强，无需等待所有图片生成完毕
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     {outfitV2SelectedCharacters.length > 0 ? (
                       <button
                         onClick={handleOutfitV2Generate}
@@ -5057,13 +5237,29 @@ export default function Home() {
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                         <div className="flex items-center justify-between">
                           <h3 className="text-lg font-semibold text-gray-700">生成进度：</h3>
-                          <div className="flex gap-2 text-sm">
+                          <div className="flex gap-2 text-sm flex-wrap">
+                            {/* 已增强 */}
+                            {Object.values(outfitV2GeneratedImages).filter(img => img.status === 'enhanced').length > 0 && (
+                              <span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full font-medium flex items-center gap-1">
+                                <span>✨</span>
+                                <span>已增强: {Object.values(outfitV2GeneratedImages).filter(img => img.status === 'enhanced').length}</span>
+                              </span>
+                            )}
+                            {/* 已生成（未增强或增强失败） */}
                             <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full font-medium">
-                              成功: {Object.values(outfitV2GeneratedImages).filter(img => img.status === 'completed').length}
+                              已生成: {Object.values(outfitV2GeneratedImages).filter(img => img.status === 'completed').length}
                             </span>
+                            {/* 增强中 */}
+                            {Object.values(outfitV2GeneratedImages).filter(img => img.status === 'enhancing').length > 0 && (
+                              <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full font-medium">
+                                增强中: {Object.values(outfitV2GeneratedImages).filter(img => img.status === 'enhancing').length}
+                              </span>
+                            )}
+                            {/* 生成中 */}
                             <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full font-medium">
                               生成中: {Object.values(outfitV2GeneratedImages).filter(img => img.status === 'generating').length}
                             </span>
+                            {/* 失败 */}
                             {Object.values(outfitV2GeneratedImages).filter(img => img.status === 'failed').length > 0 && (
                               <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full font-medium">
                                 失败: {Object.values(outfitV2GeneratedImages).filter(img => img.status === 'failed').length}
@@ -5072,19 +5268,26 @@ export default function Home() {
                           </div>
                         </div>
                         {/* Download All Button */}
-                        {Object.values(outfitV2GeneratedImages).filter(img => img.status === 'completed').length > 0 && (
+                        {Object.values(outfitV2GeneratedImages).filter(img => img.status === 'completed' || img.status === 'enhanced').length > 0 && (
                           <div className="mt-4 pt-4 border-t border-blue-200">
                             <button
                               onClick={async () => {
                                 const completedImages = Object.entries(outfitV2GeneratedImages)
-                                  .filter(([, img]) => img.status === 'completed')
-                                  .map(([index, img]) => ({ index: Number(index), url: img.url }));
+                                  .filter(([, img]) => img.status === 'completed' || img.status === 'enhanced')
+                                  .map(([index, img]) => ({
+                                    index: Number(index),
+                                    url: img.enhancedUrl || img.url,  // 优先使用增强版
+                                    isEnhanced: !!img.enhancedUrl
+                                  }));
 
-                                for (const { index, url } of completedImages) {
+                                for (const { index, url, isEnhanced } of completedImages) {
                                   const a = document.createElement('a');
-                                  const downloadUrl = `/api/download?url=${encodeURIComponent(url)}&filename=outfit-v2-${index + 1}.png`;
+                                  const filename = isEnhanced
+                                    ? `outfit-v2-enhanced-${index + 1}.png`
+                                    : `outfit-v2-${index + 1}.png`;
+                                  const downloadUrl = `/api/download?url=${encodeURIComponent(url)}&filename=${filename}`;
                                   a.href = downloadUrl;
-                                  a.download = `outfit-v2-${index + 1}.png`;
+                                  a.download = filename;
                                   document.body.appendChild(a);
                                   a.click();
                                   document.body.removeChild(a);
@@ -5097,7 +5300,7 @@ export default function Home() {
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                               </svg>
-                              <span>一键下载全部图片 ({Object.values(outfitV2GeneratedImages).filter(img => img.status === 'completed').length} 张)</span>
+                              <span>一键下载全部图片 ({Object.values(outfitV2GeneratedImages).filter(img => img.status === 'completed' || img.status === 'enhanced').length} 张)</span>
                             </button>
                           </div>
                         )}
