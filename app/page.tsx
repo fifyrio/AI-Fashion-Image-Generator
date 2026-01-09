@@ -2750,19 +2750,6 @@ export default function Home() {
               </div>
             </button>
             <button
-              onClick={() => setActiveTab('image-enhance-v2')}
-              className={`flex-1 px-4 py-3 text-sm font-semibold transition-all ${
-                activeTab === 'image-enhance-v2'
-                  ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
-                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
-              }`}
-            >
-              <div className="flex items-center justify-center gap-2">
-                <span className="text-lg">✨</span>
-                <span>画质增强V2</span>
-              </div>
-            </button>
-            <button
               onClick={() => setActiveTab('image-enhance-v3')}
               className={`flex-1 px-4 py-3 text-sm font-semibold transition-all ${
                 activeTab === 'image-enhance-v3'
