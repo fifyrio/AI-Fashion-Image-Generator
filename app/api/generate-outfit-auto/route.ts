@@ -5,7 +5,7 @@ import { saveKIETaskMetadata } from '@/lib/r2';
 import { OUTFIT_GEN_AUTO_PROMPT } from '@/lib/prompts';
 import type { KIETaskMetadata } from '@/lib/kie-image-service';
 
-export const maxDuration = 60;
+export const maxDuration = 180; // 3分钟，给 KIE API 更多的生成时间
 
 /**
  * Generate outfit using background-removed clothing image + description + model

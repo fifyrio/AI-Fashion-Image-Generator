@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { KIEImageService } from '@/lib/kie-image-service';
 
-export const maxDuration = 60;
+export const maxDuration = 180; // 3分钟，给 KIE API 更多的生成时间
 
 export async function POST(request: NextRequest) {
   try {
