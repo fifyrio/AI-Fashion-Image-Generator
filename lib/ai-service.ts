@@ -605,4 +605,60 @@ export class AIService {
             throw error;
         }
     }
+
+    /**
+     * Generate detailed clothing description using bytedance-seed model
+     * @param imageSource Image URL to analyze
+     * @returns Detailed clothing description
+     */
+    async describeClothing(imageSource: string): Promise<string> {
+        console.log('📝 Generating clothing description with bytedance-seed...');
+        console.log('🔧 Model:', AI_MODELS.BYTEDANCE_SEED);
+
+        const prompt = `Please provide a detailed description of the clothing in this image. Include:
+1. Type of garment (jacket, dress, pants, etc.)
+2. Color and color patterns
+3. Material and texture
+4. Style and design details (collars, sleeves, patterns, etc.)
+5. Overall style (casual, formal, sporty, etc.)
+
+Format the response as a coherent paragraph suitable for image generation.`;
+
+        const content: OpenAI.Chat.ChatCompletionContentPart[] = [
+            {
+                type: "text",
+                text: prompt
+            },
+            {
+                type: "image_url",
+                image_url: { url: imageSource }
+            }
+        ];
+
+        try {
+            const completion = await this.client.chat.completions.create({
+                model: AI_MODELS.BYTEDANCE_SEED,
+                messages: [{ role: "user", content }],
+                max_tokens: 500,
+                temperature: 0.7
+            }, {
+                headers: {
+                    "HTTP-Referer": openRouterConfig.siteUrl,
+                    "X-Title": openRouterConfig.siteName
+                }
+            });
+
+            if (completion.choices?.[0]?.message?.content) {
+                const description = completion.choices[0].message.content.trim();
+                console.log('✅ Description generated:', description);
+                return description;
+            }
+
+            throw new Error('Failed to generate clothing description');
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error('🚨 Clothing description failed:', errorMessage);
+            throw error;
+        }
+    }
 }

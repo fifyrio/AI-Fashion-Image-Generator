@@ -158,6 +158,10 @@ export const IMAGE_GENERATION_BASE64_TOP_ONLY_PROMPT = `保持人物身材一致
 
 上装描述:`;
 
+// 自动换装（参考图1衣服 + 参考图2模特）
+export const OUTFIT_GEN_AUTO_PROMPT = `将上传的图片换成下面的效果，图片衣服不变(参考图1), 图片模特不变(参考图2):
+{clothingDescription}`;
+
 // 提取服装（去除模特）的提示词
 export const EXTRACT_CLOTHING_PROMPT = `请从图片中提取服装，完全移除模特人物，只保留外层服装单品。
 

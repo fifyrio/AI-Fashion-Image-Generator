@@ -10,7 +10,8 @@ export const openRouterConfig = {
 export const AI_MODELS = {
     // GPT: "openai/gpt-4o-mini",
     GPT: "google/gemini-2.5-flash-image",
-    GEMINI: "google/gemini-2.5-flash-image"
+    GEMINI: "google/gemini-2.5-flash-image",
+    BYTEDANCE_SEED: "bytedance-seed/seed-1.6"
 };
 
 // 支持的图片格式
