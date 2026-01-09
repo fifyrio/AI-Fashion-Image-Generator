@@ -37,23 +37,29 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[api/generate-outfit-auto] Generating outfit`);
-    console.log(`  Clothing: ${clothingImageUrl}`);
+    console.log(`  Clothing Image: ${clothingImageUrl}`);
     console.log(`  Character: ${character}`);
     console.log(`  Description: ${description.substring(0, 100)}...`);
 
     try {
         // Get model image URL
         const modelImageUrl = getRandomModelUrl(character);
-        console.log(`  Model URL: ${modelImageUrl}`);
+        console.log(`  Model Image: ${modelImageUrl}`);
 
         // Create prompt combining description with model instructions
         const prompt = OUTFIT_GEN_AUTO_PROMPT.replace('{clothingDescription}', description);
 
         // Use KIE service to generate with 2 reference images
+        // ⚠️ 重要：模特图必须放在第一位，因为 nano-banana-edit 会以第一张图为基础进行编辑
+        const imageUrls = [modelImageUrl, clothingImageUrl]; // ✅ 模特图在前，服装图在后
+        console.log(`  📸 Image order:`);
+        console.log(`    [0] Model (base):     ${imageUrls[0]}`);
+        console.log(`    [1] Clothing (style): ${imageUrls[1]}`);
+
         const kieService = new KIEImageService();
         const taskId = await kieService.createTask(
             prompt,
-            [clothingImageUrl, modelImageUrl], // 2 reference images
+            imageUrls,
             '9:16',
             'google/nano-banana-edit'
         );
