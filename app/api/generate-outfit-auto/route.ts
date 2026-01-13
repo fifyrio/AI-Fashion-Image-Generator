@@ -8,6 +8,108 @@ import type { KIETaskMetadata } from '@/lib/kie-image-service';
 export const maxDuration = 180; // 3分钟，给 KIE API 更多的生成时间
 
 /**
+ * Build enhanced description by integrating smart matching suggestions
+ * Extracts key items (bottoms, shoes, accessories) from suggestions and adds them to description
+ */
+function buildEnhancedDescription(originalDescription: string, matchingSuggestions: string): string {
+    // Extract key matching recommendations from the suggestions
+    const lines = matchingSuggestions.split('\n').filter(line => line.trim());
+
+    let bottomsInfo = '';
+    let innerWearInfo = '';
+    let accessoriesInfo = '';
+
+    let currentSection = '';
+    for (const line of lines) {
+        const trimmedLine = line.trim();
+
+        // Detect section headers
+        if (trimmedLine.includes('推荐搭配') && (trimmedLine.includes('下装') || trimmedLine.includes('裤') || trimmedLine.includes('裙'))) {
+            currentSection = 'bottoms';
+            continue;
+        } else if (trimmedLine.includes('推荐内搭')) {
+            currentSection = 'innerwear';
+            continue;
+        } else if (trimmedLine.includes('推荐配饰')) {
+            currentSection = 'accessories';
+            continue;
+        } else if ((trimmedLine.startsWith('**') && !trimmedLine.includes('款式') && !trimmedLine.includes('颜色') && !trimmedLine.includes('材质')) || trimmedLine.startsWith('【配色') || trimmedLine.startsWith('【廓形')) {
+            // Reset on new major section (but not on field labels)
+            currentSection = '';
+            continue;
+        }
+
+        // Extract info from current section with better parsing
+        if (currentSection === 'bottoms') {
+            if (trimmedLine.includes('款式：') || trimmedLine.includes('款式:')) {
+                const value = trimmedLine.replace(/^.*?款式[：:]\s*/, '').replace(/；$/, '').trim();
+                if (value) bottomsInfo += value + '; ';
+            } else if (trimmedLine.includes('颜色：') || trimmedLine.includes('颜色:')) {
+                const value = trimmedLine.replace(/^.*?颜色[：:]\s*/, '').replace(/；$/, '').trim();
+                if (value) bottomsInfo += value + ' color; ';
+            } else if ((trimmedLine.includes('版型') || trimmedLine.includes('长度')) && trimmedLine.includes('：')) {
+                const value = trimmedLine.replace(/^-?\s*/, '').replace(/；$/, '').trim();
+                if (value) bottomsInfo += value + '; ';
+            } else if (trimmedLine.startsWith('-') && trimmedLine.length > 2) {
+                // Catch other bullet points in bottoms section
+                const value = trimmedLine.replace(/^-\s*/, '').replace(/；$/, '').trim();
+                if (value && !value.includes('**') && value.length < 100) {
+                    bottomsInfo += value + '; ';
+                }
+            }
+        }
+
+        if (currentSection === 'innerwear') {
+            if (trimmedLine.includes('款式：') || trimmedLine.includes('款式:')) {
+                const value = trimmedLine.replace(/^.*?款式[：:]\s*/, '').replace(/；$/, '').trim();
+                if (value) innerWearInfo += value + '; ';
+            } else if (trimmedLine.includes('颜色：') || trimmedLine.includes('颜色:')) {
+                const value = trimmedLine.replace(/^.*?颜色[：:]\s*/, '').replace(/；$/, '').trim();
+                if (value) innerWearInfo += value + ' color; ';
+            } else if ((trimmedLine.includes('材质') || trimmedLine.includes('说明')) && trimmedLine.includes('：')) {
+                const value = trimmedLine.replace(/^-?\s*/, '').replace(/；$/, '').trim();
+                if (value) innerWearInfo += value + '; ';
+            } else if (trimmedLine.startsWith('-') && trimmedLine.length > 2) {
+                const value = trimmedLine.replace(/^-\s*/, '').replace(/；$/, '').trim();
+                if (value && !value.includes('**') && value.length < 100) {
+                    innerWearInfo += value + '; ';
+                }
+            }
+        }
+
+        if (currentSection === 'accessories') {
+            if (trimmedLine.startsWith('-') && trimmedLine.length > 2 && !trimmedLine.includes('其他')) {
+                const value = trimmedLine.replace(/^-\s*/, '').replace(/；$/, '').trim();
+                // Skip sunglasses and bags
+                if (value && value.length < 100 && !value.includes('墨镜') && !value.includes('包包') && !value.toLowerCase().includes('bag')) {
+                    accessoriesInfo += value + '; ';
+                }
+            }
+        }
+    }
+
+    // Build enhanced description with clear sections
+    let enhanced = `TOP/JACKET (from uploaded image):\n${originalDescription}`;
+
+    if (innerWearInfo.trim()) {
+        enhanced += `\n\nINNER LAYER (AI recommendation - wear under the jacket/top):\n${innerWearInfo.trim()}`;
+    }
+
+    if (bottomsInfo.trim()) {
+        enhanced += `\n\nBOTTOMS (AI recommendation):\n${bottomsInfo.trim()}`;
+    }
+
+    if (accessoriesInfo.trim()) {
+        enhanced += `\n\nACCESSORIES (AI recommendation):\n${accessoriesInfo.trim()}`;
+    }
+
+    console.log(`  📝 Enhanced description length: ${enhanced.length} (original: ${originalDescription.length})`);
+    console.log(`  📝 Enhanced sections: ${innerWearInfo ? '✓ Inner Layer' : ''} ${bottomsInfo ? '✓ Bottoms' : ''} ${accessoriesInfo ? '✓ Accessories' : ''}`);
+
+    return enhanced;
+}
+
+/**
  * Generate outfit using background-removed clothing image + description + model
  * This is Step 3 of the automated workflow
  */
@@ -18,10 +120,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid request payload' }, { status: 400 });
     }
 
-    const { clothingImageUrl, description, character } = body as {
+    const { clothingImageUrl, description, character, matchingSuggestions } = body as {
         clothingImageUrl?: string;
         description?: string;
         character?: Character;
+        matchingSuggestions?: string;
     };
 
     if (!clothingImageUrl || typeof clothingImageUrl !== 'string') {
@@ -40,6 +143,7 @@ export async function POST(request: NextRequest) {
     console.log(`  Clothing Image: ${clothingImageUrl}`);
     console.log(`  Character: ${character}`);
     console.log(`  Description: ${description.substring(0, 100)}...`);
+    console.log(`  Smart Matching Enabled: ${!!matchingSuggestions}`);
 
     try {
         // Get model image URL
@@ -47,7 +151,16 @@ export async function POST(request: NextRequest) {
         console.log(`  Model Image: ${modelImageUrl}`);
 
         // Create prompt combining description with model instructions
-        const prompt = OUTFIT_GEN_AUTO_PROMPT.replace('{clothingDescription}', description);
+        let fullDescription = description;
+
+        // If smart matching is enabled, integrate matching suggestions into description
+        if (matchingSuggestions) {
+            console.log(`  🎨 Integrating smart matching suggestions...`);
+            // Extract key matching items from suggestions
+            fullDescription = buildEnhancedDescription(description, matchingSuggestions);
+        }
+
+        const prompt = OUTFIT_GEN_AUTO_PROMPT.replace('{clothingDescription}', fullDescription);
 
         // Use KIE service to generate with 2 reference images
         // ⚠️ 重要：模特图必须放在第一位，因为 nano-banana-edit 会以第一张图为基础进行编辑

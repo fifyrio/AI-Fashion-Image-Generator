@@ -4,7 +4,8 @@ import { ImageAnalysisResult } from './types';
 import {
     GPT_ANALYZE_CLOTHING_PROMPT,
     GPT_ANALYZE_CLOTHING_TOP_ONLY_PROMPT,
-    XIAOHONGSHU_TITLE_PROMPT
+    XIAOHONGSHU_TITLE_PROMPT,
+    SMART_OUTFIT_MATCHING_PROMPT
 } from './prompts';
 
 // 辅助函数：从可能包含 markdown 代码块的字符串中提取 JSON
@@ -660,5 +661,100 @@ Format the response as a coherent paragraph suitable for image generation.`;
             console.error('🚨 Clothing description failed:', errorMessage);
             throw error;
         }
+    }
+
+    /**
+     * Describe clothing AND generate smart matching outfit suggestions
+     * Combines clothing analysis with intelligent styling recommendations
+     */
+    async describeClothingWithSmartMatch(imageSource: string): Promise<{
+        description: string;
+        matchingSuggestions: string;
+    }> {
+        console.log('📝 Generating clothing description + smart matching with bytedance-seed...');
+        console.log('🔧 Model:', AI_MODELS.BYTEDANCE_SEED);
+
+        const prompt = SMART_OUTFIT_MATCHING_PROMPT; // From prompts.ts
+
+        const content: OpenAI.Chat.ChatCompletionContentPart[] = [
+            {
+                type: "text",
+                text: prompt
+            },
+            {
+                type: "image_url",
+                image_url: { url: imageSource }
+            }
+        ];
+
+        try {
+            const completion = await this.client.chat.completions.create({
+                model: AI_MODELS.BYTEDANCE_SEED,
+                messages: [{ role: "user", content }],
+                max_tokens: 1000,  // Increased for description + suggestions
+                temperature: 0.7
+            }, {
+                headers: {
+                    "HTTP-Referer": openRouterConfig.siteUrl,
+                    "X-Title": openRouterConfig.siteName
+                }
+            });
+
+            if (completion.choices?.[0]?.message?.content) {
+                const fullResponse = completion.choices[0].message.content.trim();
+                console.log('✅ Smart matching response generated');
+
+                // Parse response into description and suggestions
+                const result = this.parseSmartMatchResponse(fullResponse);
+
+                // Validate we got at least the description
+                if (!result.description || result.description.length < 10) {
+                    console.warn('⚠️ Description too short, falling back to basic description');
+                    const basicDescription = await this.describeClothing(imageSource);
+                    return {
+                        description: basicDescription,
+                        matchingSuggestions: ''
+                    };
+                }
+
+                return result;
+            }
+
+            throw new Error('Failed to generate clothing description with smart matching');
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error('🚨 Smart matching failed:', errorMessage);
+
+            // Graceful fallback to basic description
+            console.log('🔄 Falling back to basic description...');
+            const basicDescription = await this.describeClothing(imageSource);
+            return {
+                description: basicDescription,
+                matchingSuggestions: '智能搭配建议生成失败，请稍后重试'
+            };
+        }
+    }
+
+    /**
+     * Parse AI response to extract description and suggestions separately
+     */
+    private parseSmartMatchResponse(response: string): {
+        description: string;
+        matchingSuggestions: string;
+    } {
+        // Split by section markers
+        const descriptionMatch = response.match(/【服装描述】\s*([\s\S]*?)(?=【搭配建议】|$)/);
+        const suggestionsMatch = response.match(/【搭配建议】\s*([\s\S]*)/);
+
+        const description = descriptionMatch?.[1]?.trim() || response;
+        const matchingSuggestions = suggestionsMatch?.[1]?.trim() || '';
+
+        console.log('📊 Parsed description length:', description.length);
+        console.log('📊 Parsed suggestions length:', matchingSuggestions.length);
+
+        return {
+            description,
+            matchingSuggestions
+        };
     }
 }

@@ -159,46 +159,26 @@ export const IMAGE_GENERATION_BASE64_TOP_ONLY_PROMPT = `保持人物身材一致
 上装描述:`;
 
 // 自动换装（参考图1模特 + 参考图2服装）
-export const OUTFIT_GEN_AUTO_PROMPT = `你会收到两张参考图片：
-1. **第一张图片（模特图）**: 目标模特的照片 - 这是基础图片，必须完全保持
-2. **第二张图片（服装图）**: 提取的服装单品 - 只提供服装信息
+export const OUTFIT_GEN_AUTO_PROMPT = `Edit the first reference image by replacing ONLY the clothing with the outfit described below. The first image is the BASE - keep the model's pose, expression, body, and background 100% unchanged.
 
-任务：保持第一张图片的模特、姿势、背景完全不变，只将第二张图片的服装穿到模特身上。
+📸 Reference Images:
+- Image 1 (BASE): Model photo - preserve everything except clothing
+- Image 2: Clothing item reference (background removed) - use ONLY for style/color/design reference
 
-⚠️ 核心要求（必须严格遵守）：
-
-**1. 以第一张图为绝对基准**：
-   - 模特的身材、体型、头身比、姿势、动作、表情必须与第一张图100%一致
-   - 背景环境、场景、光线必须与第一张图100%一致
-   - 画面构图、取景范围必须与第一张图100%一致
-   - **绝对不能改变第一张图的任何元素，只能替换服装**
-
-**2. 从第二张图提取服装信息**：
-   - 服装的款式、颜色、材质、细节、图案必须与第二张图完全一致
-   - 保留服装的所有设计细节（纽扣、拉链、口袋、刺绣等）
-   - **第二张图只提供服装信息，不提供身材、比例等信息**
-
-**3. 自然穿着效果**：
-   - 服装要自然贴合模特身材（来自第一张图）
-   - 服装与模特交界处自然过渡
-   - 光影协调，服装光线与第一张图的环境光一致
-
-❌ 绝对禁止：
-- 改变模特的任何身材特征（身高、体型、比例）
-- 改变模特的姿势、动作、表情
-- 改变背景环境、场景
-- 改变画面构图、取景范围
-- 让第二张图影响第一张图的任何非服装元素
-
-✅ 正确做法：
-- 第一张图是"底片"，只在上面替换服装
-- 第二张图是"服装参考"，只提取服装款式信息
-- 最终效果就像给第一张图的模特换了衣服
-
-🎯 服装详细描述：
+🎯 Outfit to generate (wear on the model from Image 1):
 {clothingDescription}
 
-请生成一张图片，展示第一张图的模特穿着第二张图的服装的效果。`;
+✅ Requirements:
+1. Keep Image 1's model pose, body proportions, facial features, background, and lighting completely unchanged
+2. Replace/add clothing items as described above
+3. Ensure natural fit - clothing should follow the model's body contours from Image 1
+4. Match lighting and shadows to Image 1's environment
+5. Generate ALL clothing items mentioned in the description (tops, bottoms, shoes, accessories)
+
+❌ Do NOT:
+- Change the model's pose, expression, or body from Image 1
+- Change the background or scene from Image 1
+- Ignore any clothing items mentioned in the description`;
 
 // 提取服装（去除模特）的提示词
 export const EXTRACT_CLOTHING_PROMPT = `请从图片中提取服装，完全移除模特人物，只保留外层服装单品。
@@ -804,6 +784,94 @@ export const XIAOHONGSHU_TITLE_PROMPT = `你是一位专业的小红书内容创
 
 现在请根据以下信息生成标题：
 服装描述：{clothingDescription}`;
+
+// 智能穿搭匹配提示词（用于自动换装功能）
+export const SMART_OUTFIT_MATCHING_PROMPT = `你是一位专业的时尚造型顾问，请详细分析上传的服装图片，并提供智能搭配建议。
+
+【第一部分：服装描述】
+请详细描述图片中的服装，包括：
+1. 服装类型（上装/下装/连衣裙等）
+2. 颜色和图案
+3. 材质和质感
+4. 设计细节（领口、袖子、版型等）
+5. 整体风格（休闲/正式/运动等）
+
+【第二部分：智能搭配建议】
+根据上传的服装，严格遵循以下时尚法则，推荐搭配的其他单品：
+
+**核心穿搭法则（必须遵守）：**
+1. **廓形原则**：上紧下松 或 全松而不垮 或 上松下紧
+   - **上紧下松**：修身/紧身上装 + 宽松裤装（如紧身针织 + 阔腿裤）
+   - **上松下紧**：宽松/oversized上装 + 修身裤装（如宽松外套 + 紧身牛仔裤/铅笔裤）
+   - **全松而不垮**：oversized上装 + 宽松裤装，但要有结构感，不显邋遢
+
+   ⚠️ **关键规则**：
+   - 如果上传的服装是**宽松/oversized版型** → 推荐**修身/紧身**的对应单品（上松下紧）
+   - 如果上传的服装是**修身/紧身版型** → 推荐**宽松**的对应单品（上紧下松）
+   - 如果上传的服装是**适中版型** → 可推荐宽松或修身，但要说明廓形平衡
+
+2. **质感细节**：
+   - 下装垂坠感：裤子应有明显的褶皱和中缝线，垂直延伸显腿长
+   - 上装硬挺感：选择有结构感的面料（牛仔、厚棉、粗针织），不贴身不透
+
+3. **配色原则**："不超三色"
+   - 基础色：黑、白、灰（最百搭安全）
+   - 经典色：牛仔蓝、米色、驼色、卡其、军绿等大地色系
+   - 全身颜色控制在3种以内，视觉舒适度高，撞色风险低
+
+**搭配推荐规则：**
+- 如果上传的是上装（T恤、衬衫、外套等）：
+  * 推荐下装（裤子/裙子）：款式、颜色、长度
+  * 推荐配饰：首饰、围巾、腰带等
+
+- 如果上传的是下装（裤子、裙子等）：
+  * 推荐上装（T恤/衬衫/外套）：款式、颜色、版型
+  * 推荐配饰：首饰、围巾、腰带等
+
+- 如果上传的是连衣裙：
+  * 推荐外搭（外套/开衫）：款式、颜色
+  * 推荐配饰：首饰、围巾、腰带等
+
+**输出格式要求（严格遵守）：**
+
+【服装描述】
+[详细描述服装的所有信息，包括类型、颜色、材质、设计细节、风格等]
+
+【搭配建议】
+**推荐搭配[上装/下装]：**
+- 款式：[具体款式名称，如"白色宽松衬衫"、"黑色阔腿裤"等]
+- 颜色：[具体颜色，遵循不超三色原则]
+- 版型/长度：[具体描述，如"oversized"、"修身"、"九分长度"等]
+- 材质：[建议的面料材质]
+- 廓形体现：[**必须说明**：根据上传服装的版型，这个推荐是"上紧下松"、"上松下紧"还是"全松而不垮"，以及为什么这样搭配平衡]
+
+**推荐内搭：**
+- 款式：[如"白色高领打底衫"、"基础款白衬衫"、"黑色丝巾"等内搭单品]
+- 颜色：[与外套协调的颜色]
+- 材质：[针织/棉质/丝质等]
+- 说明：[解释为什么推荐这个内搭，如增加层次感、提升精致度等]
+
+**推荐配饰：**
+- [首饰、帽子、腰带、围巾等配饰单品]
+
+**配色方案：**
+- 全身配色：[列出所有颜色，确保不超过3种]
+- 主色调：[主要颜色]
+- 点缀色：[辅助颜色]
+
+**廓形总结：**
+[**必须明确说明**：
+1. 上传的服装是什么版型（宽松/修身/适中）
+2. 推荐的单品是什么版型（宽松/修身/适中）
+3. 两者组合形成什么廓形（上紧下松/上松下紧/全松而不垮）
+4. 为什么这样搭配能形成视觉平衡]
+
+**风格定位：**
+[整体穿搭风格，如"简约休闲"、"优雅知性"、"街头潮流"等]
+
+请用中文回答，确保搭配建议实用、时尚、具体且符合专业造型法则。所有推荐都要具体到单品名称、颜色、款式，避免模糊描述。
+
+⚠️ **特别提醒**：分析上传服装的版型是关键第一步！宽松上装必须配修身下装，修身上装可以配宽松下装。`;
 
 // 裤子特写镜头生成提示词模板 - 坐姿角度
 export const PANTS_CLOSEUP_SITTING_PROMPT = `将上传的图片换成下面的效果，保持人物身材的一致性：

@@ -34,7 +34,7 @@ export class ReplicateService {
             );
 
             // Output is typically a URL or data URI
-            const resultUrl = typeof output === 'string' ? output : (output as any).output;
+            const resultUrl = typeof output === 'string' ? output : (output as { output?: string }).output;
 
             if (!resultUrl) {
                 throw new Error('No output URL returned from Bria API');

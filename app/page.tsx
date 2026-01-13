@@ -325,6 +325,10 @@ export default function Home() {
     step3: 'idle' | 'processing' | 'completed' | 'failed';
   }>({ step1: 'idle', step2: 'idle', step3: 'idle' });
 
+  // Smart matching toggle and results
+  const [outfitGenAutoSmartMatchEnabled, setOutfitGenAutoSmartMatchEnabled] = useState<boolean>(false);
+  const [outfitGenAutoMatchingSuggestions, setOutfitGenAutoMatchingSuggestions] = useState<string>('');
+
   const clearMockProgressTimers = () => {
     if (progressIntervalRef.current) {
       clearInterval(progressIntervalRef.current);
@@ -2744,6 +2748,39 @@ export default function Home() {
     setOutfitGenAutoGenerating(false);
     setOutfitGenAutoError('');
     setOutfitGenAutoStepStatus({ step1: 'idle', step2: 'idle', step3: 'idle' });
+    setOutfitGenAutoMatchingSuggestions('');
+  };
+
+  // Helper function to parse and render matching suggestions
+  const parseMatchingSuggestions = (suggestions: string) => {
+    const lines = suggestions.split('\n').filter(line => line.trim());
+    return (
+      <div className="space-y-2">
+        {lines.map((line, idx) => {
+          if (line.startsWith('【') || line.startsWith('**')) {
+            // Section headers
+            return (
+              <p key={idx} className="font-semibold text-purple-700 mt-3">
+                {line.replace(/\*\*/g, '').replace(/【|】/g, '')}
+              </p>
+            );
+          } else if (line.trim().startsWith('-') || line.trim().startsWith('•')) {
+            // Bullet points
+            return (
+              <p key={idx} className="pl-4 text-gray-700">
+                {line}
+              </p>
+            );
+          } else {
+            return (
+              <p key={idx} className="text-gray-700">
+                {line}
+              </p>
+            );
+          }
+        })}
+      </div>
+    );
   };
 
   const handleOutfitGenAutoGenerate = async () => {
@@ -2784,7 +2821,7 @@ export default function Home() {
       setOutfitGenAutoRemovedBgUrl(bgRemoveData.resultUrl);
       setOutfitGenAutoStepStatus(prev => ({ ...prev, step1: 'completed' }));
 
-      // STEP 2: Generate Description
+      // STEP 2: Generate Description (+ Smart Matching if enabled)
       console.log('📝 Step 2: Generating description...');
       setOutfitGenAutoCurrentStep(2);
       setOutfitGenAutoStepStatus(prev => ({ ...prev, step2: 'processing' }));
@@ -2792,11 +2829,20 @@ export default function Home() {
       const describeResponse = await fetch('/api/describe-clothing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl: bgRemoveData.resultUrl }),
+        body: JSON.stringify({
+          imageUrl: bgRemoveData.resultUrl,
+          enableSmartMatch: outfitGenAutoSmartMatchEnabled
+        }),
       });
       if (!describeResponse.ok) throw new Error('Description generation failed');
       const describeData = await describeResponse.json();
       setOutfitGenAutoDescription(describeData.description);
+
+      // Handle smart matching suggestions if enabled
+      if (outfitGenAutoSmartMatchEnabled && describeData.matchingSuggestions) {
+        setOutfitGenAutoMatchingSuggestions(describeData.matchingSuggestions);
+      }
+
       setOutfitGenAutoStepStatus(prev => ({ ...prev, step2: 'completed' }));
 
       // STEP 3: Generate Final Outfit
@@ -2811,6 +2857,7 @@ export default function Home() {
           clothingImageUrl: bgRemoveData.resultUrl,
           description: describeData.description,
           character: outfitGenAutoSelectedCharacter,
+          matchingSuggestions: outfitGenAutoSmartMatchEnabled ? describeData.matchingSuggestions : undefined,
         }),
       });
       if (!generateResponse.ok) throw new Error('Outfit generation failed');
@@ -2819,7 +2866,7 @@ export default function Home() {
 
       // Poll for completion
       console.log('⏳ Polling for task completion...');
-      const maxAttempts = 30;
+      const maxAttempts = 90; // 90 attempts * 2 seconds = 3 minutes timeout
       for (let i = 0; i < maxAttempts; i++) {
         await new Promise(resolve => setTimeout(resolve, 2000));
 
@@ -7033,6 +7080,30 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Smart Matching Toggle */}
+              <div className="rounded-2xl border-2 border-gray-200 bg-white p-6 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-800">智能穿搭建议</h3>
+                    <p className="mt-1 text-sm text-gray-600">
+                      AI自动分析并推荐搭配的服装单品（仅供参考）
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setOutfitGenAutoSmartMatchEnabled(!outfitGenAutoSmartMatchEnabled)}
+                    className={`relative h-8 w-14 rounded-full transition-colors ${
+                      outfitGenAutoSmartMatchEnabled ? 'bg-purple-600' : 'bg-gray-300'
+                    }`}
+                  >
+                    <div
+                      className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-md transition-transform ${
+                        outfitGenAutoSmartMatchEnabled ? 'translate-x-7' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
               {/* Generate Button */}
               {outfitGenAutoFile && (
                 <button
@@ -7167,18 +7238,34 @@ export default function Home() {
                     </div>
                   )}
 
-                  {/* Step 2 Result: Description */}
+                  {/* Step 2 Result: Description + Smart Matching */}
                   {outfitGenAutoDescription && (
                     <div className="space-y-3 rounded-xl border border-gray-200 p-4">
                       <h4 className="flex items-center gap-2 font-semibold text-gray-700">
                         <span className="text-green-500">✓</span>
                         <span>步骤 2: 服装描述</span>
                       </h4>
+
+                      {/* Original Description */}
                       <div className="rounded-lg bg-gray-50 p-4">
+                        <p className="text-sm font-semibold text-gray-600 mb-2">服装详情:</p>
                         <p className="text-sm leading-relaxed text-gray-700">
                           {outfitGenAutoDescription}
                         </p>
                       </div>
+
+                      {/* Smart Matching Suggestions */}
+                      {outfitGenAutoMatchingSuggestions && (
+                        <div className="rounded-lg bg-gradient-to-br from-purple-50 to-blue-50 p-4 border-2 border-purple-200">
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-xl">✨</span>
+                            <p className="text-sm font-bold text-purple-800">智能搭配建议:</p>
+                          </div>
+                          <div className="space-y-2 text-sm text-gray-700">
+                            {parseMatchingSuggestions(outfitGenAutoMatchingSuggestions)}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
