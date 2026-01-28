@@ -8,8 +8,52 @@ import type { KIETaskMetadata } from '@/lib/kie-image-service';
 export const maxDuration = 180; // 3分钟，给 KIE API 更多的生成时间
 
 /**
+ * Extract top garment length/style keywords from description
+ * Returns structured info about the top's silhouette
+ */
+function extractTopStyleInfo(description: string): {
+    length: string;
+    fit: string;
+    formalLevel: string;
+} {
+    const lowerDesc = description.toLowerCase();
+    const desc = description;
+
+    // Extract length info
+    let length = 'regular';
+    if (desc.includes('短款') || desc.includes('到腰') || lowerDesc.includes('cropped') || lowerDesc.includes('short')) {
+        length = 'short/cropped (到腰部)';
+    } else if (desc.includes('中长款') || desc.includes('到大腿') || desc.includes('到臀')) {
+        length = 'mid-length (到大腿/臀部)';
+    } else if (desc.includes('长款') || desc.includes('到膝盖') || desc.includes('到小腿') || lowerDesc.includes('long coat')) {
+        length = 'long (到膝盖或以下)';
+    } else if (desc.includes('常规') || desc.includes('标准')) {
+        length = 'regular (常规款)';
+    }
+
+    // Extract fit info
+    let fit = 'regular';
+    if (desc.includes('修身') || desc.includes('紧身') || desc.includes('贴身') || lowerDesc.includes('slim') || lowerDesc.includes('fitted')) {
+        fit = 'slim/fitted (修身)';
+    } else if (desc.includes('宽松') || desc.includes('oversized') || desc.includes('oversize') || lowerDesc.includes('loose') || lowerDesc.includes('oversized')) {
+        fit = 'loose/oversized (宽松)';
+    }
+
+    // Extract formal level
+    let formalLevel = 'casual';
+    if (desc.includes('西装') || desc.includes('衬衫') || desc.includes('针织开衫') || desc.includes('丝绸') || desc.includes('小香风')) {
+        formalLevel = 'formal/elegant';
+    } else if (desc.includes('T恤') || desc.includes('卫衣') || desc.includes('帽衫') || desc.includes('牛仔外套') || desc.includes('运动')) {
+        formalLevel = 'casual/street';
+    }
+
+    return { length, fit, formalLevel };
+}
+
+/**
  * Build enhanced description by integrating smart matching suggestions
  * Extracts key items (bottoms, shoes, accessories) from suggestions and adds them to description
+ * Now includes strong constraints to preserve the uploaded top's exact style
  */
 function buildEnhancedDescription(originalDescription: string, matchingSuggestions: string): string {
     // Extract key matching recommendations from the suggestions
@@ -33,7 +77,7 @@ function buildEnhancedDescription(originalDescription: string, matchingSuggestio
         } else if (trimmedLine.includes('推荐配饰')) {
             currentSection = 'accessories';
             continue;
-        } else if ((trimmedLine.startsWith('**') && !trimmedLine.includes('款式') && !trimmedLine.includes('颜色') && !trimmedLine.includes('材质')) || trimmedLine.startsWith('【配色') || trimmedLine.startsWith('【廓形')) {
+        } else if ((trimmedLine.startsWith('**') && !trimmedLine.includes('款式') && !trimmedLine.includes('颜色') && !trimmedLine.includes('材质')) || trimmedLine.startsWith('【配色') || trimmedLine.startsWith('【廓形') || trimmedLine.startsWith('【混搭')) {
             // Reset on new major section (but not on field labels)
             currentSection = '';
             continue;
@@ -88,22 +132,38 @@ function buildEnhancedDescription(originalDescription: string, matchingSuggestio
         }
     }
 
-    // Build enhanced description with clear sections
-    let enhanced = `TOP/JACKET (from uploaded image):\n${originalDescription}`;
+    // Extract top style info for strict preservation
+    const topStyle = extractTopStyleInfo(originalDescription);
+
+    // Build enhanced description with STRONG constraints for top preservation
+    let enhanced = `⚠️ CRITICAL TOP GARMENT CONSTRAINTS (MUST PRESERVE EXACTLY):
+- LENGTH: ${topStyle.length} - DO NOT change! Short jacket stays short, long coat stays long!
+- FIT/SILHOUETTE: ${topStyle.fit} - DO NOT change the cut or silhouette!
+- The top garment from Image 2 (clothing reference) MUST appear EXACTLY as shown - same length, same style, same cut.
+
+TOP/JACKET (from uploaded image - PRESERVE EXACTLY):
+${originalDescription}`;
 
     if (innerWearInfo.trim()) {
-        enhanced += `\n\nINNER LAYER (AI recommendation - wear under the jacket/top):\n${innerWearInfo.trim()}`;
+        enhanced += `\n\nINNER LAYER (AI recommendation - wear under the jacket/top):
+${innerWearInfo.trim()}`;
     }
 
     if (bottomsInfo.trim()) {
-        enhanced += `\n\nBOTTOMS (AI recommendation):\n${bottomsInfo.trim()}`;
+        enhanced += `\n\nBOTTOMS (AI recommendation - mix-match style):
+${bottomsInfo.trim()}`;
     }
 
     if (accessoriesInfo.trim()) {
-        enhanced += `\n\nACCESSORIES (AI recommendation):\n${accessoriesInfo.trim()}`;
+        enhanced += `\n\nACCESSORIES (AI recommendation):
+${accessoriesInfo.trim()}`;
     }
 
+    // Add final reminder
+    enhanced += `\n\n⚠️ REMINDER: The TOP/JACKET must match the uploaded clothing image EXACTLY in terms of length, style, and silhouette. DO NOT transform a short jacket into a long one or vice versa.`;
+
     console.log(`  📝 Enhanced description length: ${enhanced.length} (original: ${originalDescription.length})`);
+    console.log(`  📝 Top style extracted: length=${topStyle.length}, fit=${topStyle.fit}`);
     console.log(`  📝 Enhanced sections: ${innerWearInfo ? '✓ Inner Layer' : ''} ${bottomsInfo ? '✓ Bottoms' : ''} ${accessoriesInfo ? '✓ Accessories' : ''}`);
 
     return enhanced;

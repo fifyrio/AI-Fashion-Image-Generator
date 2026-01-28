@@ -691,8 +691,8 @@ Format the response as a coherent paragraph suitable for image generation.`;
             const completion = await this.client.chat.completions.create({
                 model: AI_MODELS.BYTEDANCE_SEED,
                 messages: [{ role: "user", content }],
-                max_tokens: 1000,  // Increased for description + suggestions
-                temperature: 0.7
+                max_tokens: 1200,  // Increased for description + suggestions + mix-match details
+                temperature: 0.85  // Increased from 0.7 to add more variety in recommendations
             }, {
                 headers: {
                     "HTTP-Referer": openRouterConfig.siteUrl,
