@@ -124,8 +124,8 @@ function buildEnhancedDescription(originalDescription: string, matchingSuggestio
         if (currentSection === 'accessories') {
             if (trimmedLine.startsWith('-') && trimmedLine.length > 2 && !trimmedLine.includes('其他')) {
                 const value = trimmedLine.replace(/^-\s*/, '').replace(/；$/, '').trim();
-                // Skip sunglasses and bags
-                if (value && value.length < 100 && !value.includes('墨镜') && !value.includes('包包') && !value.toLowerCase().includes('bag')) {
+                // Skip sunglasses, bags, and hats
+                if (value && value.length < 100 && !value.includes('墨镜') && !value.includes('包包') && !value.includes('帽子') && !value.includes('帽') && !value.toLowerCase().includes('bag') && !value.toLowerCase().includes('hat') && !value.toLowerCase().includes('cap')) {
                     accessoriesInfo += value + '; ';
                 }
             }
