@@ -329,6 +329,11 @@ export default function Home() {
   const [outfitGenAutoSmartMatchEnabled, setOutfitGenAutoSmartMatchEnabled] = useState<boolean>(false);
   const [outfitGenAutoMatchingSuggestions, setOutfitGenAutoMatchingSuggestions] = useState<string>('');
 
+  // Image enhancement toggle and status
+  const [outfitGenAutoEnhanceEnabled, setOutfitGenAutoEnhanceEnabled] = useState<boolean>(false);
+  const [outfitGenAutoEnhancing, setOutfitGenAutoEnhancing] = useState<boolean>(false);
+  const [outfitGenAutoEnhancedUrl, setOutfitGenAutoEnhancedUrl] = useState<string>('');
+
   const clearMockProgressTimers = () => {
     if (progressIntervalRef.current) {
       clearInterval(progressIntervalRef.current);
@@ -2792,6 +2797,7 @@ export default function Home() {
     setOutfitGenAutoGenerating(true);
     setOutfitGenAutoError('');
     setOutfitGenAutoCurrentStep(1);
+    setOutfitGenAutoEnhancedUrl(''); // Reset enhanced URL for new generation
 
     try {
       // STEP 1: Upload + Remove Background
@@ -2874,8 +2880,38 @@ export default function Home() {
         const statusData = await statusResponse.json();
 
         if (statusData.status === 'completed' && statusData.resultUrls?.[0]) {
-          setOutfitGenAutoFinalUrl(statusData.resultUrls[0]);
+          const generatedImageUrl = statusData.resultUrls[0];
+          setOutfitGenAutoFinalUrl(generatedImageUrl);
           setOutfitGenAutoStepStatus(prev => ({ ...prev, step3: 'completed' }));
+          console.log('✅ Generation completed!');
+
+          // Image enhancement if enabled
+          if (outfitGenAutoEnhanceEnabled) {
+            console.log('🔄 Starting image enhancement...');
+            setOutfitGenAutoEnhancing(true);
+            try {
+              const enhanceResponse = await fetch('/api/enhance-ilovepdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  images: [{ imageUrl: generatedImageUrl }],
+                  multiplier: 2
+                }),
+              });
+              const enhanceData = await enhanceResponse.json();
+              if (enhanceData.success && enhanceData.results?.[0]?.success) {
+                setOutfitGenAutoEnhancedUrl(enhanceData.results[0].enhancedUrl);
+                console.log('✅ Image enhancement completed!');
+              } else {
+                console.warn('⚠️ Image enhancement failed:', enhanceData.results?.[0]?.error);
+              }
+            } catch (enhanceError) {
+              console.error('❌ Enhancement error:', enhanceError);
+            } finally {
+              setOutfitGenAutoEnhancing(false);
+            }
+          }
+
           setOutfitGenAutoCurrentStep('idle');
           console.log('✅ All steps completed!');
           break;
@@ -7104,6 +7140,30 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Image Enhancement Toggle */}
+              <div className="rounded-2xl border-2 border-gray-200 bg-white p-6 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-800">开启图像增强</h3>
+                    <p className="mt-1 text-sm text-gray-600">
+                      生成完成后自动进行AI图像增强（提升清晰度）
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setOutfitGenAutoEnhanceEnabled(!outfitGenAutoEnhanceEnabled)}
+                    className={`relative h-8 w-14 rounded-full transition-colors ${
+                      outfitGenAutoEnhanceEnabled ? 'bg-purple-600' : 'bg-gray-300'
+                    }`}
+                  >
+                    <div
+                      className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-md transition-transform ${
+                        outfitGenAutoEnhanceEnabled ? 'translate-x-7' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
               {/* Generate Button */}
               {outfitGenAutoFile && (
                 <button
@@ -7299,8 +7359,61 @@ export default function Home() {
                         className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-green-600 to-blue-600 px-4 py-3 font-semibold text-white shadow-md transition-all hover:from-green-500 hover:to-blue-500"
                       >
                         <span>📥</span>
-                        <span>下载图片</span>
+                        <span>下载原图</span>
                       </button>
+                    </div>
+                  )}
+
+                  {/* Image Enhancement Status */}
+                  {outfitGenAutoEnhanceEnabled && outfitGenAutoFinalUrl && (
+                    <div className="space-y-3 rounded-xl border border-purple-200 bg-purple-50 p-4">
+                      <h4 className="flex items-center gap-2 font-semibold text-gray-700">
+                        {outfitGenAutoEnhancing ? (
+                          <>
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-purple-500 border-t-transparent"></div>
+                            <span>图像增强中...</span>
+                          </>
+                        ) : outfitGenAutoEnhancedUrl ? (
+                          <>
+                            <span className="text-green-500">✓</span>
+                            <span>图像增强完成</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-yellow-500">⏳</span>
+                            <span>等待增强</span>
+                          </>
+                        )}
+                      </h4>
+                      {outfitGenAutoEnhancedUrl && (
+                        <>
+                          <div className="relative h-96 w-full overflow-hidden rounded-lg border border-purple-200">
+                            <Image
+                              src={outfitGenAutoEnhancedUrl}
+                              alt="增强后效果"
+                              fill
+                              unoptimized
+                              className="object-contain"
+                            />
+                          </div>
+                          <button
+                            onClick={() => {
+                              const filename = 'outfit-generation-enhanced.png';
+                              const downloadUrl = `/api/download?url=${encodeURIComponent(outfitGenAutoEnhancedUrl)}&filename=${filename}`;
+                              const a = document.createElement('a');
+                              a.href = downloadUrl;
+                              a.download = filename;
+                              document.body.appendChild(a);
+                              a.click();
+                              document.body.removeChild(a);
+                            }}
+                            className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-3 font-semibold text-white shadow-md transition-all hover:from-purple-500 hover:to-pink-500"
+                          >
+                            <span>📥</span>
+                            <span>下载增强图</span>
+                          </button>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
