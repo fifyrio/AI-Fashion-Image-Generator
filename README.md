@@ -92,4 +92,4 @@ npm run test-copywriting # 测试文案生成功能
 
 ## License
 
-MIT
+
