@@ -72,7 +72,7 @@ const IMAGE_ENHANCE_UPSCALE_OPTIONS = ['2x', '4x', '6x'] as const;
 type ImageEnhanceModel = (typeof IMAGE_ENHANCE_MODELS)[number];
 type ImageEnhanceUpscale = (typeof IMAGE_ENHANCE_UPSCALE_OPTIONS)[number];
 
-type TabType = 'outfit-change' | 'scene-pose' | 'model-pose' | 'model-generation' | 'image-enhance' | 'image-enhance-v2' | 'image-enhance-v3' | 'outfit-change-v2' | 'mimic-reference' | 'copywriting' | 'pants-closeup' | 'anime-cover' | 'outfit-gen-auto';
+type TabType = 'outfit-change' | 'scene-pose' | 'model-pose' | 'model-generation' | 'image-enhance' | 'image-enhance-v2' | 'image-enhance-v3' | 'outfit-change-v2' | 'mimic-reference' | 'copywriting' | 'pants-closeup' | 'anime-cover' | 'outfit-gen-auto' | 'outfit-summary';
 
 interface ScenePoseSuggestion {
   scene: string;
@@ -333,6 +333,16 @@ export default function Home() {
   const [outfitGenAutoEnhanceEnabled, setOutfitGenAutoEnhanceEnabled] = useState<boolean>(false);
   const [outfitGenAutoEnhancing, setOutfitGenAutoEnhancing] = useState<boolean>(false);
   const [outfitGenAutoEnhancedUrl, setOutfitGenAutoEnhancedUrl] = useState<string>('');
+
+  // Outfit Summary tab states
+  const [outfitSummaryFiles, setOutfitSummaryFiles] = useState<File[]>([]);
+  const [outfitSummaryPreviews, setOutfitSummaryPreviews] = useState<string[]>([]);
+  const [outfitSummaryUploadedUrls, setOutfitSummaryUploadedUrls] = useState<string[]>([]);
+  const [outfitSummaryAnalyzing, setOutfitSummaryAnalyzing] = useState(false);
+  const [outfitSummaryResult, setOutfitSummaryResult] = useState<import('@/lib/types').OutfitSummaryResult | null>(null);
+  const [outfitSummaryError, setOutfitSummaryError] = useState('');
+  const [isDraggingOutfitSummary, setIsDraggingOutfitSummary] = useState(false);
+  const outfitSummaryFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const clearMockProgressTimers = () => {
     if (progressIntervalRef.current) {
@@ -2947,13 +2957,22 @@ export default function Home() {
           <h1 className="text-4xl font-bold text-gray-800 text-center md:text-left">
             AI Fashion Image Generator
           </h1>
-          <button
-            onClick={handleOpenAddModelModal}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-6 py-3 text-white font-semibold shadow-lg hover:from-purple-500 hover:to-blue-400 transition-colors"
-          >
-            <span className="text-xl">👤</span>
-            添加模特
-          </button>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <a
+              href="/analysis"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-500 to-purple-600 px-6 py-3 text-white font-semibold shadow-lg hover:from-pink-600 hover:to-purple-700 transition-colors"
+            >
+              <span className="text-xl">📊</span>
+              爆款总结
+            </a>
+            <button
+              onClick={handleOpenAddModelModal}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-500 px-6 py-3 text-white font-semibold shadow-lg hover:from-purple-500 hover:to-blue-400 transition-colors"
+            >
+              <span className="text-xl">👤</span>
+              添加模特
+            </button>
+          </div>
         </div>
 
         {/* Global Header with Tabs */}

@@ -84,3 +84,81 @@ export interface GenerationFailure {
     source: UploadedReference;
     error: string;
 }
+
+// 单个穿搭分析
+export interface IndividualOutfitAnalysis {
+    imageIndex: number;
+    imageUrl?: string;
+    top: {
+        type: string;
+        color: string;
+        material: string;
+        fit: string;
+        designFeatures: string;
+        style: string;
+    };
+    bottom: {
+        type: string;
+        color: string;
+        material: string;
+        fit: string;
+        designFeatures: string;
+    };
+    colorScheme: string;
+    styleTags: string[];
+    summary: string;
+}
+
+// 穿搭公式
+export interface OutfitFormula {
+    formulaName: string;
+    topPattern: string;
+    bottomPattern: string;
+    matchingPrinciple: string;
+    styleEffect: string;
+    suitableScenes: string[];
+    examples: string;
+}
+
+// 共同规律
+export interface CommonPatterns {
+    colorPatterns: {
+        frequentCombos: string[];
+        coloringTechniques: string;
+        colorRatios: string;
+    };
+    fitPatterns: {
+        topBottomBalance: string;
+        silhouetteRules: string;
+    };
+    materialPatterns: {
+        contrastUsage: string;
+        materialEchoes: string;
+    };
+    stylePatterns: {
+        dominantStyle: string;
+        mixingTechniques: string;
+    };
+    frequentItems: string[];
+}
+
+// 实用建议
+export interface PracticalAdvice {
+    mustHaveItems: string[];
+    colorSchemeRecommendations: string[];
+    commonMistakes: string[];
+    advancedTips: string[];
+}
+
+// 爆款总结完整结果
+export interface OutfitSummaryResult {
+    overallSummary: {
+        mainStyle: string;
+        keyFeatures: string[];
+        description: string;
+    };
+    individualAnalysis: IndividualOutfitAnalysis[];
+    outfitFormulas: OutfitFormula[];
+    commonPatterns: CommonPatterns;
+    practicalAdvice: PracticalAdvice;
+}

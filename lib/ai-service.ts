@@ -5,7 +5,8 @@ import {
     GPT_ANALYZE_CLOTHING_PROMPT,
     GPT_ANALYZE_CLOTHING_TOP_ONLY_PROMPT,
     XIAOHONGSHU_TITLE_PROMPT,
-    SMART_OUTFIT_MATCHING_PROMPT
+    SMART_OUTFIT_MATCHING_PROMPT,
+    OUTFIT_SUMMARY_PROMPT
 } from './prompts';
 
 // 辅助函数：从可能包含 markdown 代码块的字符串中提取 JSON
@@ -756,5 +757,77 @@ Format the response as a coherent paragraph suitable for image generation.`;
             description,
             matchingSuggestions
         };
+    }
+
+    /**
+     * Analyze multiple outfit images and summarize hit product formulas
+     * @param imageUrls Array of image URLs to analyze
+     * @returns Structured outfit summary with formulas and patterns
+     */
+    async analyzeOutfitSummary(imageUrls: string[]): Promise<import('./types').OutfitSummaryResult> {
+        console.log('👗 正在分析爆款穿搭公式...');
+        console.log('🔧 模型:', AI_MODELS.GPT);
+        console.log('📊 图片数量:', imageUrls.length);
+
+        const prompt = OUTFIT_SUMMARY_PROMPT.replace('{imageCount}', imageUrls.length.toString());
+
+        // Build content array with text prompt + all images
+        const content: OpenAI.Chat.ChatCompletionContentPart[] = [
+            {
+                type: "text",
+                text: prompt
+            },
+            ...imageUrls.map(url => ({
+                type: "image_url" as const,
+                image_url: { url }
+            }))
+        ];
+
+        try {
+            const completion = await this.client.chat.completions.create({
+                model: AI_MODELS.GPT,
+                messages: [{ role: "user", content }],
+                max_tokens: 6000, // Need larger token limit for comprehensive analysis
+                temperature: 0.75 // Balanced creativity for pattern recognition
+            }, {
+                headers: {
+                    "HTTP-Referer": openRouterConfig.siteUrl,
+                    "X-Title": openRouterConfig.siteName
+                }
+            });
+
+            console.log('📦 API完整响应:', JSON.stringify(completion, null, 2));
+
+            if (completion.choices?.[0]?.message?.content) {
+                const responseContent = completion.choices[0].message.content;
+                console.log('✅ 响应内容:', responseContent);
+
+                // Extract JSON from response (handle markdown code blocks)
+                const jsonStr = extractJsonFromMarkdown(responseContent);
+
+                const result: import('./types').OutfitSummaryResult = JSON.parse(jsonStr);
+
+                // Add imageUrls to individualAnalysis for frontend display
+                if (result.individualAnalysis) {
+                    result.individualAnalysis = result.individualAnalysis.map((analysis, index) => ({
+                        ...analysis,
+                        imageUrl: imageUrls[index]
+                    }));
+                }
+
+                return result;
+            }
+
+            throw new Error('爆款总结生成失败：API响应格式错误或内容为空');
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error('🚨 爆款总结失败:', errorMessage);
+
+            if (error instanceof Error && 'response' in error) {
+                console.error('🔍 错误详情:', error);
+            }
+
+            throw error;
+        }
     }
 }
