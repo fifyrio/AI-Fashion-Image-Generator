@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { openRouterConfig, AI_MODELS } from './config';
-import { ImageAnalysisResult } from './types';
+import { ImageAnalysisResult, TopGarmentAnalysis, BottomRecommendation } from './types';
 import {
     GPT_ANALYZE_CLOTHING_PROMPT,
     GPT_ANALYZE_CLOTHING_TOP_ONLY_PROMPT,
@@ -8,6 +8,7 @@ import {
     SMART_OUTFIT_MATCHING_PROMPT,
     OUTFIT_SUMMARY_PROMPT
 } from './prompts';
+import { OutfitFormulaMatcher } from './outfit-formula-matcher';
 
 // 辅助函数：从可能包含 markdown 代码块的字符串中提取 JSON
 function extractJsonFromMarkdown(content: string): string {
@@ -665,17 +666,223 @@ Format the response as a coherent paragraph suitable for image generation.`;
     }
 
     /**
+     * Extract top garment features from an image for formula matching
+     */
+    async extractTopFeatures(imageSource: string): Promise<TopGarmentAnalysis> {
+        console.log('🔍 Extracting top garment features...');
+        console.log('🔧 Model:', AI_MODELS.BYTEDANCE_SEED);
+
+        const prompt = `分析这件上装的特征，严格按照 JSON 格式输出，不要添加任何其他文字：
+{
+  "type": "服装类型（如：羽绒服、针织衫、衬衫、卫衣、马甲、皮草、毛绒外套、西装等）",
+  "length": "长度（短款/常规/中长/长款）",
+  "fit": "版型（修身/宽松/oversized）",
+  "style": "风格（休闲/正式/运动/精致/优雅/街头等）",
+  "color": "主色调",
+  "material": "材质（如：羽绒、针织、牛仔、皮革、毛绒等）"
+}`;
+
+        const content: OpenAI.Chat.ChatCompletionContentPart[] = [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url: imageSource } }
+        ];
+
+        try {
+            const completion = await this.client.chat.completions.create({
+                model: AI_MODELS.BYTEDANCE_SEED,
+                messages: [{ role: "user", content }],
+                max_tokens: 500,
+                temperature: 0.3 // Low temperature for consistent feature extraction
+            }, {
+                headers: {
+                    "HTTP-Referer": openRouterConfig.siteUrl,
+                    "X-Title": openRouterConfig.siteName
+                }
+            });
+
+            if (completion.choices?.[0]?.message?.content) {
+                const responseContent = completion.choices[0].message.content.trim();
+                console.log('✅ Top features extracted:', responseContent);
+
+                const jsonStr = extractJsonFromMarkdown(responseContent);
+                const features: TopGarmentAnalysis = JSON.parse(jsonStr);
+
+                // Provide defaults for missing fields
+                return {
+                    type: features.type || '上装',
+                    length: features.length || '常规',
+                    fit: features.fit || '宽松',
+                    style: features.style || '休闲',
+                    color: features.color || '中性色',
+                    material: features.material
+                };
+            }
+
+            throw new Error('Failed to extract top features');
+        } catch (error) {
+            console.error('🚨 Top feature extraction failed:', error);
+            // Return defaults on error
+            return {
+                type: '上装',
+                length: '常规',
+                fit: '宽松',
+                style: '休闲',
+                color: '中性色'
+            };
+        }
+    }
+
+    /**
+     * Generate final description text based on matched formula recommendation
+     */
+    async generateDescriptionWithRecommendation(
+        imageSource: string,
+        topAnalysis: TopGarmentAnalysis,
+        recommendation: BottomRecommendation
+    ): Promise<{
+        description: string;
+        matchingSuggestions: string;
+    }> {
+        console.log('📝 Generating description with formula recommendation...');
+        console.log('🔧 Model:', AI_MODELS.BYTEDANCE_SEED);
+        console.log('📋 Matched formula:', recommendation.formulaName);
+
+        const prompt = `你是一位专业的时尚造型师。请根据以下信息生成穿搭描述和建议。
+
+**上装信息：**
+- 类型：${topAnalysis.type}
+- 长度：${topAnalysis.length}
+- 版型：${topAnalysis.fit}
+- 风格：${topAnalysis.style}
+- 颜色：${topAnalysis.color}
+${topAnalysis.material ? `- 材质：${topAnalysis.material}` : ''}
+
+**匹配的爆款公式：** ${recommendation.formulaName}
+
+**推荐下装：**
+- 类型：${recommendation.type}
+- 颜色：${recommendation.color}
+- 版型：${recommendation.fit}
+${recommendation.material ? `- 材质：${recommendation.material}` : ''}
+
+**搭配原则：** ${recommendation.principle}
+
+请根据图片中的上装和以上推荐，用以下格式输出：
+
+【服装描述】
+（详细描述图片中上装的款式、颜色、材质、设计细节等，2-3句话）
+
+【搭配建议】
+**参考公式**：${recommendation.formulaName}
+
+**推荐下装**：${recommendation.type}（${recommendation.color}，${recommendation.fit}）
+
+**搭配亮点**：
+- 这样搭配可以${recommendation.principle}
+- （根据上装特点补充1-2个搭配亮点）
+
+**风格效果**：（描述整体穿搭效果，如显瘦、显高、时髦等）
+
+注意：
+1. 推荐的下装必须严格按照上述推荐，不要自己发挥
+2. 不要推荐帽子或任何头饰
+3. 描述要自然流畅，有吸引力`;
+
+        const content: OpenAI.Chat.ChatCompletionContentPart[] = [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url: imageSource } }
+        ];
+
+        try {
+            const completion = await this.client.chat.completions.create({
+                model: AI_MODELS.BYTEDANCE_SEED,
+                messages: [{ role: "user", content }],
+                max_tokens: 1000,
+                temperature: 0.75
+            }, {
+                headers: {
+                    "HTTP-Referer": openRouterConfig.siteUrl,
+                    "X-Title": openRouterConfig.siteName
+                }
+            });
+
+            if (completion.choices?.[0]?.message?.content) {
+                const fullResponse = completion.choices[0].message.content.trim();
+                console.log('✅ Description with recommendation generated');
+                return this.parseSmartMatchResponse(fullResponse);
+            }
+
+            throw new Error('Failed to generate description with recommendation');
+        } catch (error) {
+            console.error('🚨 Description generation failed:', error);
+            throw error;
+        }
+    }
+
+    /**
      * Describe clothing AND generate smart matching outfit suggestions
-     * Combines clothing analysis with intelligent styling recommendations
+     * Uses the OutfitFormulaMatcher for programmatic formula matching
      */
     async describeClothingWithSmartMatch(imageSource: string): Promise<{
         description: string;
         matchingSuggestions: string;
     }> {
-        console.log('📝 Generating clothing description + smart matching with bytedance-seed...');
+        console.log('📝 Generating clothing description + smart matching...');
+        console.log('🔧 Using formula matcher for intelligent recommendations');
+
+        try {
+            // Step 1: Extract top garment features using AI
+            console.log('📊 Step 1: Extracting top features...');
+            const topAnalysis = await this.extractTopFeatures(imageSource);
+            console.log('✅ Top analysis:', JSON.stringify(topAnalysis));
+
+            // Step 2: Use formula matcher to find best matching formula
+            console.log('📊 Step 2: Matching formula...');
+            const matcher = new OutfitFormulaMatcher();
+            const matchResult = matcher.match(topAnalysis);
+            console.log('✅ Match result:', {
+                formula: matchResult.matchedFormula.name,
+                score: matchResult.score,
+                confidence: matchResult.confidence,
+                fallback: matchResult.fallback
+            });
+
+            // Step 3: Generate bottom recommendation from matched formula
+            console.log('📊 Step 3: Generating recommendation...');
+            const recommendation = matcher.generateRecommendation(matchResult);
+            console.log('✅ Recommendation:', JSON.stringify(recommendation));
+
+            // Step 4: Generate final description with AI using the recommendation
+            console.log('📊 Step 4: Generating final description...');
+            const result = await this.generateDescriptionWithRecommendation(
+                imageSource,
+                topAnalysis,
+                recommendation
+            );
+
+            return result;
+
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error('🚨 Smart matching with formula matcher failed:', errorMessage);
+
+            // Fallback to original prompt-based approach
+            console.log('🔄 Falling back to prompt-based approach...');
+            return this.describeClothingWithSmartMatchFallback(imageSource);
+        }
+    }
+
+    /**
+     * Fallback method using the original prompt-based approach
+     */
+    private async describeClothingWithSmartMatchFallback(imageSource: string): Promise<{
+        description: string;
+        matchingSuggestions: string;
+    }> {
+        console.log('📝 Using fallback prompt-based smart matching...');
         console.log('🔧 Model:', AI_MODELS.BYTEDANCE_SEED);
 
-        const prompt = SMART_OUTFIT_MATCHING_PROMPT; // From prompts.ts
+        const prompt = SMART_OUTFIT_MATCHING_PROMPT;
 
         const content: OpenAI.Chat.ChatCompletionContentPart[] = [
             {
@@ -692,8 +899,8 @@ Format the response as a coherent paragraph suitable for image generation.`;
             const completion = await this.client.chat.completions.create({
                 model: AI_MODELS.BYTEDANCE_SEED,
                 messages: [{ role: "user", content }],
-                max_tokens: 1200,  // Increased for description + suggestions + mix-match details
-                temperature: 0.85  // Increased from 0.7 to add more variety in recommendations
+                max_tokens: 1200,
+                temperature: 0.85
             }, {
                 headers: {
                     "HTTP-Referer": openRouterConfig.siteUrl,
@@ -703,12 +910,10 @@ Format the response as a coherent paragraph suitable for image generation.`;
 
             if (completion.choices?.[0]?.message?.content) {
                 const fullResponse = completion.choices[0].message.content.trim();
-                console.log('✅ Smart matching response generated');
+                console.log('✅ Fallback smart matching response generated');
 
-                // Parse response into description and suggestions
                 const result = this.parseSmartMatchResponse(fullResponse);
 
-                // Validate we got at least the description
                 if (!result.description || result.description.length < 10) {
                     console.warn('⚠️ Description too short, falling back to basic description');
                     const basicDescription = await this.describeClothing(imageSource);
@@ -724,10 +929,8 @@ Format the response as a coherent paragraph suitable for image generation.`;
             throw new Error('Failed to generate clothing description with smart matching');
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            console.error('🚨 Smart matching failed:', errorMessage);
+            console.error('🚨 Fallback smart matching failed:', errorMessage);
 
-            // Graceful fallback to basic description
-            console.log('🔄 Falling back to basic description...');
             const basicDescription = await this.describeClothing(imageSource);
             return {
                 description: basicDescription,

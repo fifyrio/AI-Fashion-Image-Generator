@@ -162,3 +162,67 @@ export interface OutfitSummaryResult {
     commonPatterns: CommonPatterns;
     practicalAdvice: PracticalAdvice;
 }
+
+// ========== 公式匹配器类型 ==========
+
+// 上装分析结果（从 AI 分析中提取）
+export interface TopGarmentAnalysis {
+    type: string;      // 服装类型
+    length: string;    // 长度
+    fit: string;       // 版型
+    style: string;     // 风格
+    color: string;     // 颜色
+    material?: string; // 材质（可选）
+}
+
+// 公式定义
+export interface FormulaDefinition {
+    id: string;
+    name: string;
+
+    // 上装匹配规则
+    topRules: {
+        types: string[];        // 服装类型关键词
+        lengths: string[];      // 长度关键词
+        styles: string[];       // 风格关键词
+        excludeTypes?: string[]; // 排除类型
+    };
+
+    // 推荐的下装
+    bottomRecommendation: {
+        types: string[];        // 下装类型
+        colors: string[];       // 颜色
+        fits: string[];         // 版型
+        materials?: string[];   // 材质（可选）
+    };
+
+    // 搭配原则
+    principle: string;
+    styleEffect: string;
+
+    // 评分权重
+    weights: {
+        typeMatch: number;
+        lengthMatch: number;
+        styleMatch: number;
+        colorMatch: number;
+    };
+}
+
+// 公式匹配结果
+export interface FormulaMatchResult {
+    matchedFormula: FormulaDefinition;
+    score: number;
+    confidence: 'high' | 'low';
+    fallback?: boolean;
+}
+
+// 下装推荐
+export interface BottomRecommendation {
+    type: string;
+    color: string;
+    fit: string;
+    material?: string;
+    formulaName: string;
+    principle: string;
+}
