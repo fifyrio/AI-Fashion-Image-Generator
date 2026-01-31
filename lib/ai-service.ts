@@ -747,6 +747,8 @@ Format the response as a coherent paragraph suitable for image generation.`;
         console.log('🔧 Model:', AI_MODELS.BYTEDANCE_SEED);
         console.log('📋 Matched formula:', recommendation.formulaName);
 
+        // 使用与 buildEnhancedDescription 解析器兼容的格式
+        // 解析器会查找：'推荐搭配' && ('下装'||'裤'||'裙')，然后提取 款式：、颜色：、版型： 等字段
         const prompt = `你是一位专业的时尚造型师。请根据以下信息生成穿搭描述和建议。
 
 **上装信息：**
@@ -767,7 +769,7 @@ ${recommendation.material ? `- 材质：${recommendation.material}` : ''}
 
 **搭配原则：** ${recommendation.principle}
 
-请根据图片中的上装和以上推荐，用以下格式输出：
+请根据图片中的上装和以上推荐，严格按照以下格式输出：
 
 【服装描述】
 （详细描述图片中上装的款式、颜色、材质、设计细节等，2-3句话）
@@ -775,18 +777,23 @@ ${recommendation.material ? `- 材质：${recommendation.material}` : ''}
 【搭配建议】
 **参考公式**：${recommendation.formulaName}
 
-**推荐下装**：${recommendation.type}（${recommendation.color}，${recommendation.fit}）
+**推荐搭配下装：**
+- 款式：${recommendation.type}
+- 颜色：${recommendation.color}
+- 版型/长度：${recommendation.fit}
+${recommendation.material ? `- 材质：${recommendation.material}` : '- 材质：弹力舒适面料'}
+- 搭配原则：${recommendation.principle}
 
-**搭配亮点**：
-- 这样搭配可以${recommendation.principle}
-- （根据上装特点补充1-2个搭配亮点）
+**推荐配饰：**
+- 简约金属项链或耳饰
+- 细腰带（可选）
 
 **风格效果**：（描述整体穿搭效果，如显瘦、显高、时髦等）
 
 注意：
 1. 推荐的下装必须严格按照上述推荐，不要自己发挥
 2. 不要推荐帽子或任何头饰
-3. 描述要自然流畅，有吸引力`;
+3. 输出格式必须严格遵循上述模板，特别是"推荐搭配下装："这一行的格式`;
 
         const content: OpenAI.Chat.ChatCompletionContentPart[] = [
             { type: "text", text: prompt },
@@ -852,15 +859,19 @@ ${recommendation.material ? `- 材质：${recommendation.material}` : ''}
             const recommendation = matcher.generateRecommendation(matchResult);
             console.log('✅ Recommendation:', JSON.stringify(recommendation));
 
-            // Step 4: Generate final description with AI using the recommendation
-            console.log('📊 Step 4: Generating final description...');
-            const result = await this.generateDescriptionWithRecommendation(
-                imageSource,
-                topAnalysis,
-                recommendation
-            );
+            // Step 4: Generate description for the top garment only
+            console.log('📊 Step 4: Generating top description...');
+            const description = await this.generateTopDescription(imageSource, topAnalysis);
 
-            return result;
+            // Step 5: Construct matchingSuggestions directly from structured recommendation
+            // This format is compatible with buildEnhancedDescription parser
+            const matchingSuggestions = this.buildMatchingSuggestionsFromRecommendation(recommendation, matchResult);
+            console.log('✅ Constructed matchingSuggestions:', matchingSuggestions.substring(0, 200) + '...');
+
+            return {
+                description,
+                matchingSuggestions
+            };
 
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -870,6 +881,81 @@ ${recommendation.material ? `- 材质：${recommendation.material}` : ''}
             console.log('🔄 Falling back to prompt-based approach...');
             return this.describeClothingWithSmartMatchFallback(imageSource);
         }
+    }
+
+    /**
+     * Generate a simple description for the top garment only
+     */
+    private async generateTopDescription(imageSource: string, topAnalysis: TopGarmentAnalysis): Promise<string> {
+        const prompt = `请用1-2句话简洁描述图片中的上装，包括颜色、款式、材质、长度、版型等关键信息。
+用中文回答，不需要分析搭配建议。
+
+参考信息：
+- 类型：${topAnalysis.type}
+- 长度：${topAnalysis.length}
+- 版型：${topAnalysis.fit}
+- 风格：${topAnalysis.style}
+- 颜色：${topAnalysis.color}
+${topAnalysis.material ? `- 材质：${topAnalysis.material}` : ''}`;
+
+        const content: OpenAI.Chat.ChatCompletionContentPart[] = [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url: imageSource } }
+        ];
+
+        try {
+            const completion = await this.client.chat.completions.create({
+                model: AI_MODELS.BYTEDANCE_SEED,
+                messages: [{ role: "user", content }],
+                max_tokens: 300,
+                temperature: 0.5
+            }, {
+                headers: {
+                    "HTTP-Referer": openRouterConfig.siteUrl,
+                    "X-Title": openRouterConfig.siteName
+                }
+            });
+
+            if (completion.choices?.[0]?.message?.content) {
+                return completion.choices[0].message.content.trim();
+            }
+            throw new Error('Failed to generate top description');
+        } catch (error) {
+            console.error('🚨 Top description generation failed:', error);
+            // Return a basic description from the analysis
+            return `这是一件${topAnalysis.color}的${topAnalysis.fit}${topAnalysis.length}${topAnalysis.type}，${topAnalysis.style}风格${topAnalysis.material ? `，采用${topAnalysis.material}材质` : ''}。`;
+        }
+    }
+
+    /**
+     * Build matchingSuggestions string from structured recommendation
+     * Format is compatible with buildEnhancedDescription parser in generate-outfit-auto route
+     */
+    private buildMatchingSuggestionsFromRecommendation(
+        recommendation: BottomRecommendation,
+        matchResult: import('./types').FormulaMatchResult
+    ): string {
+        // This format matches what buildEnhancedDescription expects:
+        // - Lines containing '推荐搭配' AND ('下装'||'裤'||'裙') trigger bottoms section
+        // - Then it looks for lines with '款式：', '颜色：', '版型'/'长度：'
+        return `**参考公式**：${recommendation.formulaName}（匹配度：${matchResult.score}分，${matchResult.confidence === 'high' ? '高置信度' : '参考匹配'}）
+
+**推荐搭配下装：**
+- 款式：${recommendation.type}
+- 颜色：${recommendation.color}
+- 版型/长度：${recommendation.fit}，紧身修身
+${recommendation.material ? `- 材质：${recommendation.material}` : '- 材质：弹力舒适面料'}
+- 混搭体现：${recommendation.principle}
+
+**推荐配饰：**
+- 简约金属项链或耳饰
+- 细腰带或皮带（可选）
+
+**配色方案：**
+- 主色调：与上装协调
+- 全身颜色控制在3色以内
+
+**风格效果**：${matchResult.matchedFormula.styleEffect}`;
     }
 
     /**
