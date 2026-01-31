@@ -47,17 +47,17 @@ export class OutfitFormulaMatcher {
   }
 
   /**
-   * 生成下装推荐
+   * 生成下装推荐（包含内搭，如果公式需要的话）
    */
   generateRecommendation(matchResult: FormulaMatchResult): BottomRecommendation {
-    const { bottomRecommendation } = matchResult.matchedFormula;
+    const { bottomRecommendation, innerLayerRecommendation } = matchResult.matchedFormula;
 
-    // 从推荐列表中随机选择
+    // 从推荐列表中随机选择下装
     const selectedType = this.randomSelect(bottomRecommendation.types);
     const selectedColor = this.randomSelect(bottomRecommendation.colors);
     const selectedFit = this.randomSelect(bottomRecommendation.fits);
 
-    return {
+    const recommendation: BottomRecommendation = {
       type: selectedType,
       color: selectedColor,
       fit: selectedFit,
@@ -65,6 +65,18 @@ export class OutfitFormulaMatcher {
       formulaName: matchResult.matchedFormula.name,
       principle: matchResult.matchedFormula.principle
     };
+
+    // 如果公式需要内搭（如马甲、西装），添加内搭推荐
+    if (innerLayerRecommendation) {
+      recommendation.innerLayer = {
+        type: this.randomSelect(innerLayerRecommendation.types),
+        color: this.randomSelect(innerLayerRecommendation.colors),
+        fit: this.randomSelect(innerLayerRecommendation.fits),
+        material: innerLayerRecommendation.materials?.[0]
+      };
+    }
+
+    return recommendation;
   }
 
   /**
@@ -138,10 +150,10 @@ export class OutfitFormulaMatcher {
         weights: { typeMatch: 40, lengthMatch: 30, styleMatch: 20, colorMatch: 10 }
       },
 
-      // 公式二：羽绒马甲 + 撞色/同色紧身打底
+      // 公式二：羽绒马甲 + 内搭 + 撞色/同色紧身打底
       {
         id: 'formula-2',
-        name: '羽绒马甲 + 撞色/同色紧身打底',
+        name: '羽绒马甲 + 紧身打底衫 + 紧身裤',
         topRules: {
           types: ['马甲', 'vest', 'gilet', '羽绒马甲', 'puffer vest', '背心'],
           lengths: ['常规', 'regular', '标准', '中长'],
@@ -152,6 +164,13 @@ export class OutfitFormulaMatcher {
           colors: ['黑色', 'black', '深灰', 'dark grey', '米白', 'beige'],
           fits: ['紧身', 'tight', '修身', 'fitted'],
           materials: ['德绒', 'velvet', '弹力面料']
+        },
+        // 马甲必须有内搭
+        innerLayerRecommendation: {
+          types: ['紧身打底衫', '高领打底衫', '修身长袖T恤', '薄款针织衫', '紧身上衣'],
+          colors: ['白色', 'white', '黑色', 'black', '灰色', 'grey', '米色', 'beige'],
+          fits: ['紧身', 'tight', '修身', 'fitted'],
+          materials: ['棉质', 'cotton', '德绒', '弹力面料']
         },
         principle: '露出手臂线条，减轻冬季穿搭的厚重感，显得轻盈运动',
         styleEffect: '轻盈、运动、显瘦',
@@ -218,10 +237,10 @@ export class OutfitFormulaMatcher {
         weights: { typeMatch: 35, lengthMatch: 25, styleMatch: 30, colorMatch: 10 }
       },
 
-      // 公式六：西装外套 + 阔腿裤/直筒裤（通勤公式）
+      // 公式六：西装外套 + 内搭 + 阔腿裤/直筒裤（通勤公式）
       {
         id: 'formula-6',
-        name: '西装外套 + 阔腿裤/直筒裤',
+        name: '西装外套 + 衬衫/针织衫 + 阔腿裤',
         topRules: {
           types: ['西装', 'blazer', 'suit jacket', '西装外套', '小西装'],
           lengths: ['常规', 'regular', '中长', '短款'],
@@ -232,6 +251,13 @@ export class OutfitFormulaMatcher {
           colors: ['黑色', 'black', '深灰', 'charcoal', '米色', 'beige', '卡其'],
           fits: ['宽松', 'loose', '直筒', 'straight', '高腰'],
           materials: ['西装面料', '垂坠面料', 'draping fabric']
+        },
+        // 西装需要内搭
+        innerLayerRecommendation: {
+          types: ['白衬衫', '丝绸衬衫', '修身T恤', '薄款针织衫', '吊带背心'],
+          colors: ['白色', 'white', '黑色', 'black', '米色', 'cream', '浅蓝', 'light blue'],
+          fits: ['修身', 'fitted', '适中', 'regular'],
+          materials: ['棉质', 'cotton', '丝绸', 'silk', '雪纺', 'chiffon']
         },
         principle: '上下协调，干练利落，拉长比例',
         styleEffect: '职业、干练、气场强',

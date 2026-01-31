@@ -196,6 +196,14 @@ export interface FormulaDefinition {
         materials?: string[];   // 材质（可选）
     };
 
+    // 推荐的内搭（可选，马甲、西装等需要内搭）
+    innerLayerRecommendation?: {
+        types: string[];        // 内搭类型
+        colors: string[];       // 颜色
+        fits: string[];         // 版型
+        materials?: string[];   // 材质（可选）
+    };
+
     // 搭配原则
     principle: string;
     styleEffect: string;
@@ -225,4 +233,11 @@ export interface BottomRecommendation {
     material?: string;
     formulaName: string;
     principle: string;
+    // 内搭推荐（马甲、西装等需要）
+    innerLayer?: {
+        type: string;
+        color: string;
+        fit: string;
+        material?: string;
+    };
 }

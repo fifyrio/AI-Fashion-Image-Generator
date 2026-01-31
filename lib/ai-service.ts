@@ -937,9 +937,24 @@ ${topAnalysis.material ? `- 材质：${topAnalysis.material}` : ''}`;
     ): string {
         // This format matches what buildEnhancedDescription expects:
         // - Lines containing '推荐搭配' AND ('下装'||'裤'||'裙') trigger bottoms section
+        // - Lines containing '推荐内搭' trigger innerwear section
         // - Then it looks for lines with '款式：', '颜色：', '版型'/'长度：'
-        return `**参考公式**：${recommendation.formulaName}（匹配度：${matchResult.score}分，${matchResult.confidence === 'high' ? '高置信度' : '参考匹配'}）
 
+        // 构建内搭推荐（如果存在）
+        let innerLayerSection = '';
+        if (recommendation.innerLayer) {
+            innerLayerSection = `
+**推荐内搭：**
+- 款式：${recommendation.innerLayer.type}
+- 颜色：${recommendation.innerLayer.color}
+- 版型：${recommendation.innerLayer.fit}
+${recommendation.innerLayer.material ? `- 材质：${recommendation.innerLayer.material}` : '- 材质：舒适透气面料'}
+- 说明：作为${matchResult.matchedFormula.topRules.types[0]}的内搭，增加层次感和保暖性
+`;
+        }
+
+        return `**参考公式**：${recommendation.formulaName}（匹配度：${matchResult.score}分，${matchResult.confidence === 'high' ? '高置信度' : '参考匹配'}）
+${innerLayerSection}
 **推荐搭配下装：**
 - 款式：${recommendation.type}
 - 颜色：${recommendation.color}
