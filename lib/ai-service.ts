@@ -953,6 +953,25 @@ ${recommendation.innerLayer.material ? `- 材质：${recommendation.innerLayer.m
 `;
         }
 
+        // 构建配饰推荐
+        // 如果 accessories 是 undefined，使用默认配饰
+        // 如果 accessories 是数组，使用公式指定的配饰
+        let accessoriesSection = '';
+        if (recommendation.accessories !== undefined) {
+            // 使用公式指定的配饰
+            if (recommendation.accessories.length > 0) {
+                accessoriesSection = `**推荐配饰：**\n${recommendation.accessories.map(a => `- ${a}`).join('\n')}`;
+            } else {
+                // 空数组表示不推荐配饰
+                accessoriesSection = '';
+            }
+        } else {
+            // 默认配饰
+            accessoriesSection = `**推荐配饰：**
+- 简约金属项链或耳饰
+- 细腰带或皮带（可选）`;
+        }
+
         return `**参考公式**：${recommendation.formulaName}（匹配度：${matchResult.score}分，${matchResult.confidence === 'high' ? '高置信度' : '参考匹配'}）
 ${innerLayerSection}
 **推荐搭配下装：**
@@ -962,9 +981,7 @@ ${innerLayerSection}
 ${recommendation.material ? `- 材质：${recommendation.material}` : '- 材质：弹力舒适面料'}
 - 混搭体现：${recommendation.principle}
 
-**推荐配饰：**
-- 简约金属项链或耳饰
-- 细腰带或皮带（可选）
+${accessoriesSection}
 
 **配色方案：**
 - 主色调：与上装协调

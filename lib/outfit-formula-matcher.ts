@@ -47,10 +47,10 @@ export class OutfitFormulaMatcher {
   }
 
   /**
-   * 生成下装推荐（包含内搭，如果公式需要的话）
+   * 生成下装推荐（包含内搭和配饰，如果公式指定的话）
    */
   generateRecommendation(matchResult: FormulaMatchResult): BottomRecommendation {
-    const { bottomRecommendation, innerLayerRecommendation } = matchResult.matchedFormula;
+    const { bottomRecommendation, innerLayerRecommendation, accessoriesRecommendation } = matchResult.matchedFormula;
 
     // 从推荐列表中随机选择下装
     const selectedType = this.randomSelect(bottomRecommendation.types);
@@ -74,6 +74,12 @@ export class OutfitFormulaMatcher {
         fit: this.randomSelect(innerLayerRecommendation.fits),
         material: innerLayerRecommendation.materials?.[0]
       };
+    }
+
+    // 如果公式指定了配饰推荐，使用公式指定的配饰
+    // undefined = 使用默认配饰, 数组 = 使用指定配饰
+    if (accessoriesRecommendation !== undefined) {
+      recommendation.accessories = accessoriesRecommendation;
     }
 
     return recommendation;
@@ -212,6 +218,8 @@ export class OutfitFormulaMatcher {
           fits: ['修身', 'fitted', '紧身', 'tight'],
           materials: ['弹力面料', 'stretch', '速干面料']
         },
+        // 运动风格不推荐腰带，只推荐运动配饰
+        accessoriesRecommendation: ['简约运动手表', '运动发带', '小巧耳钉'],
         principle: '强调身材曲线，上深下浅配色打破沉闷',
         styleEffect: '健康美、运动风、清新',
         weights: { typeMatch: 35, lengthMatch: 15, styleMatch: 30, colorMatch: 20 }

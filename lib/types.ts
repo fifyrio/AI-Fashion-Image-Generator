@@ -204,6 +204,10 @@ export interface FormulaDefinition {
         materials?: string[];   // 材质（可选）
     };
 
+    // 推荐的配饰（可选，不同公式有不同适合的配饰）
+    // 如果不指定，使用默认配饰；如果指定空数组，则不推荐配饰
+    accessoriesRecommendation?: string[];
+
     // 搭配原则
     principle: string;
     styleEffect: string;
@@ -240,4 +244,6 @@ export interface BottomRecommendation {
         fit: string;
         material?: string;
     };
+    // 配饰推荐（可选，undefined表示使用默认，空数组表示不推荐配饰）
+    accessories?: string[];
 }
