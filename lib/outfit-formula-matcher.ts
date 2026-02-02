@@ -48,8 +48,10 @@ export class OutfitFormulaMatcher {
 
   /**
    * 生成下装推荐（包含内搭和配饰，如果公式指定的话）
+   * @param matchResult 匹配结果
+   * @param topAnalysis 上装分析结果（用于智能配色）
    */
-  generateRecommendation(matchResult: FormulaMatchResult): BottomRecommendation {
+  generateRecommendation(matchResult: FormulaMatchResult, topAnalysis?: TopGarmentAnalysis): BottomRecommendation {
     const { bottomRecommendation, innerLayerRecommendation, accessoriesRecommendation } = matchResult.matchedFormula;
 
     // 从推荐列表中随机选择下装
@@ -68,9 +70,14 @@ export class OutfitFormulaMatcher {
 
     // 如果公式需要内搭（如马甲、西装），添加内搭推荐
     if (innerLayerRecommendation) {
+      // 智能配色：根据上装颜色选择协调的内搭颜色
+      const innerLayerColor = topAnalysis
+        ? this.selectCoordinatingColor(topAnalysis.color, innerLayerRecommendation.colors)
+        : this.randomSelect(innerLayerRecommendation.colors);
+
       recommendation.innerLayer = {
         type: this.randomSelect(innerLayerRecommendation.types),
-        color: this.randomSelect(innerLayerRecommendation.colors),
+        color: innerLayerColor,
         fit: this.randomSelect(innerLayerRecommendation.fits),
         material: innerLayerRecommendation.materials?.[0]
       };
@@ -290,6 +297,52 @@ export class OutfitFormulaMatcher {
    */
   private randomSelect<T>(arr: T[]): T {
     return arr[Math.floor(Math.random() * arr.length)];
+  }
+
+  /**
+   * 根据上装颜色选择协调的内搭颜色
+   * 配色原则：
+   * - 深色上装 → 浅色内搭（形成对比）
+   * - 浅色上装 → 深色或中性色内搭
+   * - 彩色上装 → 中性色内搭（避免冲突）
+   */
+  private selectCoordinatingColor(topColor: string, availableColors: string[]): string {
+    const lowerTopColor = topColor.toLowerCase();
+
+    // 定义颜色分类
+    const darkColors = ['黑色', 'black', '深色', 'dark', '藏蓝', 'navy', '深灰', 'charcoal', '深蓝', 'dark blue', '墨绿', '咖啡', '深棕'];
+    const lightColors = ['白色', 'white', '米色', 'beige', '浅灰', 'light grey', '奶白', 'cream', '米白', '象牙', 'ivory', '浅色', 'light'];
+    const neutralColors = ['灰色', 'grey', 'gray', '黑色', 'black', '白色', 'white', '米色', 'beige'];
+
+    // 判断上装颜色类型
+    const isTopDark = darkColors.some(c => lowerTopColor.includes(c.toLowerCase()));
+    const isTopLight = lightColors.some(c => lowerTopColor.includes(c.toLowerCase()));
+
+    // 根据上装颜色筛选协调的内搭颜色
+    let preferredColors: string[] = [];
+
+    if (isTopDark) {
+      // 深色上装 → 优先选择浅色内搭
+      preferredColors = availableColors.filter(c =>
+        lightColors.some(light => c.toLowerCase().includes(light.toLowerCase()))
+      );
+    } else if (isTopLight) {
+      // 浅色上装 → 可以选择深色或中性色内搭
+      preferredColors = availableColors.filter(c =>
+        darkColors.some(dark => c.toLowerCase().includes(dark.toLowerCase())) ||
+        neutralColors.some(neutral => c.toLowerCase().includes(neutral.toLowerCase()))
+      );
+    } else {
+      // 彩色上装 → 优先选择中性色内搭
+      preferredColors = availableColors.filter(c =>
+        neutralColors.some(neutral => c.toLowerCase().includes(neutral.toLowerCase()))
+      );
+    }
+
+    // 如果有匹配的协调颜色，从中随机选择；否则随机选择任意颜色
+    return preferredColors.length > 0
+      ? this.randomSelect(preferredColors)
+      : this.randomSelect(availableColors);
   }
 
   /**
