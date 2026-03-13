@@ -851,18 +851,28 @@ ${recommendation.material ? `- 材质：${recommendation.material}` : '- 材质�
                 formula: matchResult.matchedFormula.name,
                 score: matchResult.score,
                 confidence: matchResult.confidence,
-                fallback: matchResult.fallback
+                fallback: matchResult.fallback,
+                skipBottomRecommendation: matchResult.skipBottomRecommendation
             });
+
+            // Step 4: Generate description for the top garment only
+            console.log('📊 Step 4: Generating top description...');
+            const description = await this.generateTopDescription(imageSource, topAnalysis);
+
+            // Check if this is a one-piece garment (dress/skirt) that doesn't need bottom recommendation
+            if (matchResult.skipBottomRecommendation) {
+                console.log('⏭️  Skipping bottom recommendation for one-piece garment');
+                return {
+                    description,
+                    matchingSuggestions: '' // No matching suggestions for one-piece garments
+                };
+            }
 
             // Step 3: Generate bottom recommendation from matched formula
             // 传入 topAnalysis 用于智能配色（内搭颜色根据上装颜色协调选择）
             console.log('📊 Step 3: Generating recommendation...');
             const recommendation = matcher.generateRecommendation(matchResult, topAnalysis);
             console.log('✅ Recommendation:', JSON.stringify(recommendation));
-
-            // Step 4: Generate description for the top garment only
-            console.log('📊 Step 4: Generating top description...');
-            const description = await this.generateTopDescription(imageSource, topAnalysis);
 
             // Step 5: Construct matchingSuggestions directly from structured recommendation
             // This format is compatible with buildEnhancedDescription parser

@@ -25,6 +25,29 @@ export class OutfitFormulaMatcher {
    * 匹配最佳公式
    */
   match(topAnalysis: TopGarmentAnalysis): FormulaMatchResult {
+    // 检查是否为一件式服装（裙子、连衣裙等），这类服装不需要下装推荐
+    const onePieceGarmentKeywords = [
+      '裙子', '连衣裙', 'dress', 'skirt', '长裙', '短裙',
+      '半身裙', '背心裙', '吊带裙', 'midi dress', 'maxi dress',
+      'mini dress', 'a-line skirt', 'pencil skirt'
+    ];
+
+    const isOnePieceGarment = onePieceGarmentKeywords.some(keyword =>
+      topAnalysis.type.toLowerCase().includes(keyword.toLowerCase())
+    );
+
+    // 如果是一件式服装，创建一个特殊的匹配结果
+    if (isOnePieceGarment) {
+      console.log('🔔 Detected one-piece garment (dress/skirt), skipping bottom recommendation');
+      // 返回第一个公式作为占位，但标记为跳过下装推荐
+      return {
+        matchedFormula: this.formulas[0],
+        score: 0,
+        confidence: 'high',
+        skipBottomRecommendation: true
+      };
+    }
+
     const scores: ScoredFormula[] = this.formulas.map(formula => ({
       formula,
       score: this.calculateScore(formula, topAnalysis)
