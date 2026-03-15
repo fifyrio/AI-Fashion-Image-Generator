@@ -977,10 +977,20 @@ ${recommendation.innerLayer.material ? `- 材质：${recommendation.innerLayer.m
                 accessoriesSection = '';
             }
         } else {
-            // 默认配饰
-            accessoriesSection = `**推荐配饰：**
+            // 默认配饰 - 根据下装类型决定是否推荐腰带
+            // leggings/瑜伽裤/鲨鱼裤/打底裤等紧身弹力裤没有腰带扣，不应搭配腰带
+            const bottomType = recommendation.type.toLowerCase();
+            const noBeltBottoms = ['leggings', '紧身裤', '瑜伽裤', '鲨鱼裤', '打底裤', '运动裤', 'yoga pants', '健身裤', '运动紧身裤'];
+            const shouldSkipBelt = noBeltBottoms.some(keyword => bottomType.includes(keyword));
+
+            if (shouldSkipBelt) {
+                accessoriesSection = `**推荐配饰：**
+- 简约金属项链或耳饰`;
+            } else {
+                accessoriesSection = `**推荐配饰：**
 - 简约金属项链或耳饰
 - 细腰带或皮带（可选）`;
+            }
         }
 
         return `**参考公式**：${recommendation.formulaName}（匹配度：${matchResult.score}分，${matchResult.confidence === 'high' ? '高置信度' : '参考匹配'}）

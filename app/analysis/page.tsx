@@ -176,6 +176,130 @@ export default function AnalysisPage() {
           </ul>
         </div>
 
+        {/* Trending Style Keywords Guide */}
+        <div className="bg-gradient-to-r from-orange-50 to-red-50 rounded-xl p-6 border-2 border-orange-200 shadow-lg mb-8">
+          <h3 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-3">
+            <span className="text-3xl">🔥</span>
+            <span>高流量穿搭风格 &amp; 搜索关键词</span>
+            <span className="px-3 py-1 bg-orange-500 text-white text-xs font-bold rounded-full">Qiao模特适用</span>
+          </h3>
+          <p className="text-gray-500 text-sm mb-5">基于真实自媒体账号数据分析，以下风格在短视频平台播放量最高，搜索对应关键词选品可获得更好的流量反馈</p>
+
+          <div className="space-y-4">
+            {/* TOP 1 */}
+            <div className="bg-white rounded-xl p-5 border border-orange-200 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center gap-3 mb-3">
+                <span className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-red-500 to-orange-500 text-white font-bold rounded-full flex items-center justify-center text-sm">1</span>
+                <h4 className="text-lg font-bold text-orange-800">街头运动风</h4>
+                <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded-full">10.5万播放</span>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">黑色系为主 + 字母/图案元素 + 紧身下装，潮酷感强</p>
+              <div className="flex flex-wrap gap-2">
+                {['字母卫衣', 'graphic hoodie', '潮牌卫衣', '印花卫衣', '黑色运动风', '酷girl穿搭', 'oversize卫衣 字母', '街头风上衣'].map((kw, i) => (
+                  <span key={i} className="px-3 py-1.5 bg-orange-100 text-orange-800 rounded-lg text-sm font-medium border border-orange-200">{kw}</span>
+                ))}
+              </div>
+            </div>
+
+            {/* TOP 2 */}
+            <div className="bg-white rounded-xl p-5 border border-orange-200 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center gap-3 mb-3">
+                <span className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-orange-500 to-yellow-500 text-white font-bold rounded-full flex items-center justify-center text-sm">2</span>
+                <h4 className="text-lg font-bold text-orange-800">大地色/暖棕色系</h4>
+                <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-bold rounded-full">7.6万播放</span>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">棕色、驼色、焦糖色等暖色调，整体温暖高级感</p>
+              <div className="flex flex-wrap gap-2">
+                {['棕色外套', '焦糖色上衣', '大地色穿搭', '驼色短外套', '咖啡色针织', '棕色系穿搭', '暖色调外套', '焦糖色卫衣'].map((kw, i) => (
+                  <span key={i} className="px-3 py-1.5 bg-amber-100 text-amber-800 rounded-lg text-sm font-medium border border-amber-200">{kw}</span>
+                ))}
+              </div>
+            </div>
+
+            {/* TOP 3 */}
+            <div className="bg-white rounded-xl p-5 border border-orange-200 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center gap-3 mb-3">
+                <span className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-green-600 to-green-500 text-white font-bold rounded-full flex items-center justify-center text-sm">3</span>
+                <h4 className="text-lg font-bold text-orange-800">军绿/飞行员夹克风</h4>
+                <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full">4.9万播放</span>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">深绿色/橄榄绿短款夹克，帅气利落，搭配黑色修身裤</p>
+              <div className="flex flex-wrap gap-2">
+                {['军绿夹克', '飞行员夹克', 'bomber jacket', '深绿外套', '橄榄绿夹克', '工装外套 短款', '军事风穿搭', '帅气夹克女'].map((kw, i) => (
+                  <span key={i} className="px-3 py-1.5 bg-green-100 text-green-800 rounded-lg text-sm font-medium border border-green-200">{kw}</span>
+                ))}
+              </div>
+            </div>
+
+            {/* TOP 4 */}
+            <div className="bg-white rounded-xl p-5 border border-orange-200 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center gap-3 mb-3">
+                <span className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-500 text-white font-bold rounded-full flex items-center justify-center text-sm">4</span>
+                <h4 className="text-lg font-bold text-orange-800">叠穿休闲风</h4>
+                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">3.0万播放</span>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">多层次叠穿，长外套+内搭+紧身下装，层次感丰富</p>
+              <div className="flex flex-wrap gap-2">
+                {['长款外套叠穿', '秋冬叠穿', '层次感穿搭', '休闲长外套', '叠穿风格', '多层次穿搭'].map((kw, i) => (
+                  <span key={i} className="px-3 py-1.5 bg-blue-100 text-blue-800 rounded-lg text-sm font-medium border border-blue-200">{kw}</span>
+                ))}
+              </div>
+            </div>
+
+            {/* TOP 5 */}
+            <div className="bg-white rounded-xl p-5 border border-orange-200 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center gap-3 mb-3">
+                <span className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-500 text-white font-bold rounded-full flex items-center justify-center text-sm">5</span>
+                <h4 className="text-lg font-bold text-orange-800">深色修身风</h4>
+                <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full">2.7万播放</span>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">深蓝/深色修身上装，突出身材曲线，简约利落</p>
+              <div className="flex flex-wrap gap-2">
+                {['深蓝修身上衣', '深色polo女', '修身针织衫', '紧身上衣 深色', '简约修身穿搭', '深蓝色上衣'].map((kw, i) => (
+                  <span key={i} className="px-3 py-1.5 bg-indigo-100 text-indigo-800 rounded-lg text-sm font-medium border border-indigo-200">{kw}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Avoid Section */}
+          <div className="mt-5 bg-red-50 rounded-xl p-4 border border-red-200">
+            <h4 className="font-semibold text-red-700 mb-2 flex items-center gap-2">
+              <span>&#x26A0;&#xFE0F;</span>
+              <span>低流量预警 - 避免搜索</span>
+            </h4>
+            <div className="flex flex-wrap gap-2">
+              {['格纹外套', '格子衫', '花纹外套', '过于素净基础款', '浅色系无对比'].map((kw, i) => (
+                <span key={i} className="px-3 py-1.5 bg-red-100 text-red-600 rounded-lg text-sm font-medium border border-red-200 line-through">{kw}</span>
+              ))}
+            </div>
+            <p className="text-xs text-red-500 mt-2">格纹/花纹类仅9112播放，为最低流量风格</p>
+          </div>
+
+          {/* Summary */}
+          <div className="mt-5 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl p-4 border border-yellow-300">
+            <h4 className="font-semibold text-yellow-800 mb-2">流量密码总结</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-700">
+              <div className="flex items-start gap-2">
+                <span className="text-yellow-600 font-bold mt-0.5">1.</span>
+                <span><strong>深色调为王</strong>：黑色、深绿、深棕为主色调</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-yellow-600 font-bold mt-0.5">2.</span>
+                <span><strong>对比感强烈</strong>：上松下紧 + 明暗色彩对比</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-yellow-600 font-bold mt-0.5">3.</span>
+                <span><strong>风格辨识度高</strong>：每套都有明确的风格标签</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-yellow-600 font-bold mt-0.5">4.</span>
+                <span><strong>适度潮流元素</strong>：字母印花、图案设计增加吸引力</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Upload Section */}
         <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
           <div className="flex items-center justify-between mb-6">
