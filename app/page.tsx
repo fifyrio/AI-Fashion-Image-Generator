@@ -72,7 +72,13 @@ const IMAGE_ENHANCE_UPSCALE_OPTIONS = ['2x', '4x', '6x'] as const;
 type ImageEnhanceModel = (typeof IMAGE_ENHANCE_MODELS)[number];
 type ImageEnhanceUpscale = (typeof IMAGE_ENHANCE_UPSCALE_OPTIONS)[number];
 
-type TabType = 'outfit-change' | 'scene-pose' | 'model-pose' | 'model-generation' | 'image-enhance' | 'image-enhance-v2' | 'image-enhance-v3' | 'outfit-change-v2' | 'mimic-reference' | 'copywriting' | 'pants-closeup' | 'anime-cover' | 'outfit-gen-auto' | 'outfit-summary';
+type TabType = 'outfit-change' | 'scene-pose' | 'model-pose' | 'model-generation' | 'image-enhance' | 'image-enhance-v2' | 'image-enhance-v3' | 'outfit-change-v2' | 'mimic-reference' | 'copywriting' | 'pants-closeup' | 'anime-cover' | 'outfit-gen-auto' | 'outfit-summary' | 'ugc-generator';
+
+type UGCPreset = 'hook' | 'result';
+const UGC_PRESET_LABELS: Record<UGCPreset, string> = {
+  hook:   'Slide 1 — Hook（错误珠宝）',
+  result: 'Slide 4 — Result（正确珠宝 golden hour）',
+};
 
 interface ScenePoseSuggestion {
   scene: string;
@@ -343,6 +349,19 @@ export default function Home() {
   const [outfitSummaryError, setOutfitSummaryError] = useState('');
   const [isDraggingOutfitSummary, setIsDraggingOutfitSummary] = useState(false);
   const outfitSummaryFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // UGC Generator tab states
+  const [ugcPreset, setUGCPreset] = useState<UGCPreset>('hook');
+  const [ugcCustomPrompt, setUGCCustomPrompt] = useState('');
+  const [ugcGenerating, setUGCGenerating] = useState(false);
+  const [ugcStatus, setUGCStatus] = useState('');
+  const [ugcImageUrl, setUGCImageUrl] = useState<string | null>(null);
+  const [ugcTaskId, setUGCTaskId] = useState<string | null>(null);
+  const [ugcRefFile, setUGCRefFile] = useState<File | null>(null);
+  const [ugcRefPreview, setUGCRefPreview] = useState<string>('');
+  const [ugcRefUploadedUrl, setUGCRefUploadedUrl] = useState<string>('');
+  const [ugcRefUploading, setUGCRefUploading] = useState(false);
+  const ugcRefInputRef = useRef<HTMLInputElement | null>(null);
 
   const clearMockProgressTimers = () => {
     if (progressIntervalRef.current) {
@@ -2453,6 +2472,74 @@ export default function Home() {
     }
   };
 
+  const handleUGCRefFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUGCRefFile(file);
+    setUGCRefPreview(URL.createObjectURL(file));
+    setUGCRefUploadedUrl('');
+
+    setUGCRefUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('files', file);
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      const json = await res.json();
+      const url: string = json.uploaded?.[0]?.url;
+      if (!url) throw new Error('上传失败');
+      setUGCRefUploadedUrl(url);
+    } catch (err) {
+      console.error('UGC ref upload failed:', err);
+      setUGCStatus('参考图片上传失败，请重试');
+    } finally {
+      setUGCRefUploading(false);
+    }
+  };
+
+  const handleUGCGeneration = async () => {
+    if (!ugcRefUploadedUrl) {
+      setUGCStatus('请先上传参考图片');
+      return;
+    }
+
+    setUGCGenerating(true);
+    setUGCImageUrl(null);
+    setUGCTaskId(null);
+    setUGCStatus('正在提交 UGC 模特编辑任务...');
+
+    try {
+      const response = await fetch('/api/generate-ugc-model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          preset: ugcPreset,
+          customPrompt: ugcCustomPrompt,
+          imageUrl: ugcRefUploadedUrl,
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => null);
+        throw new Error(err?.error || '生成失败');
+      }
+
+      const data = await response.json();
+      if (!data.taskId) throw new Error('任务创建失败，请稍后重试');
+
+      setUGCTaskId(data.taskId);
+      setUGCStatus(`任务已创建（ID: ${data.taskId}），正在生成图片，约需 30-60 秒...`);
+
+      const imageUrl = await pollTaskStatus(data.taskId, 60);
+      setUGCImageUrl(imageUrl);
+      setUGCStatus('生成完成！');
+    } catch (error) {
+      console.error('UGC 生成失败:', error);
+      setUGCStatus(error instanceof Error ? error.message : '生成失败，请稍后重试');
+    } finally {
+      setUGCGenerating(false);
+    }
+  };
+
   const handleImageEnhanceUploadClick = () => {
     imageEnhanceFileInputRef.current?.click();
   };
@@ -3106,6 +3193,19 @@ export default function Home() {
               <div className="flex items-center justify-center gap-2">
                 <span className="text-lg">📚</span>
                 <span>生成动漫封面</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('ugc-generator')}
+              className={`flex-1 px-4 py-3 text-sm font-semibold transition-all ${
+                activeTab === 'ugc-generator'
+                  ? 'text-purple-700 border-b-2 border-purple-700 bg-purple-50'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-lg">💎</span>
+                <span>UGC 模特</span>
               </div>
             </button>
           </div>
@@ -4501,6 +4601,171 @@ export default function Home() {
                     >
                       在新标签页打开
                     </a>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'ugc-generator' && (
+            <div className="space-y-8">
+              <div className="space-y-2">
+                <h2 className="text-2xl font-semibold text-gray-700">UGC 模特生成</h2>
+                <p className="text-sm text-gray-500">
+                  上传参考模特图 → Seedream 4.5 Edit 保持面部特征不变，仅替换珠宝/服装/光线，确保跨 Slide 人物一致性。
+                </p>
+              </div>
+
+              {/* Step 1: Upload reference image */}
+              <div className="space-y-3">
+                <h3 className="text-lg font-semibold text-gray-700">1. 上传参考模特图</h3>
+                <input
+                  ref={ugcRefInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleUGCRefFileChange}
+                />
+                {!ugcRefPreview ? (
+                  <button
+                    onClick={() => ugcRefInputRef.current?.click()}
+                    className="flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 hover:bg-gray-100 hover:border-purple-400 transition cursor-pointer"
+                  >
+                    <span className="text-3xl mb-2">📷</span>
+                    <span className="text-sm text-gray-500">点击上传参考模特图（建议使用 9:16 竖版）</span>
+                  </button>
+                ) : (
+                  <div className="flex items-start gap-4">
+                    <div className="relative w-28 aspect-[9/16] rounded-xl overflow-hidden border border-gray-200 flex-shrink-0">
+                      <Image src={ugcRefPreview} alt="参考图" fill className="object-cover" unoptimized />
+                    </div>
+                    <div className="flex flex-col gap-2 pt-1">
+                      {ugcRefUploading ? (
+                        <div className="flex items-center gap-2 text-sm text-blue-600">
+                          <span className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent" />
+                          正在上传...
+                        </div>
+                      ) : ugcRefUploadedUrl ? (
+                        <span className="text-sm text-green-600 font-medium">✅ 上传成功</span>
+                      ) : null}
+                      <button
+                        onClick={() => ugcRefInputRef.current?.click()}
+                        className="text-sm text-gray-500 underline hover:text-purple-600"
+                      >
+                        更换图片
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Step 2: Preset selector */}
+              <div className="space-y-3">
+                <h3 className="text-lg font-semibold text-gray-700">2. 选择预设</h3>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  {(Object.keys(UGC_PRESET_LABELS) as UGCPreset[]).map(key => (
+                    <button
+                      key={key}
+                      onClick={() => setUGCPreset(key)}
+                      className={`flex-1 rounded-xl border-2 px-4 py-3 text-sm font-semibold transition-all ${
+                        ugcPreset === key
+                          ? 'border-purple-600 bg-purple-50 text-purple-700'
+                          : 'border-gray-300 text-gray-700 hover:border-purple-400'
+                      }`}
+                    >
+                      {UGC_PRESET_LABELS[key]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Step 3: Custom prompt override */}
+              <div className="space-y-2">
+                <h3 className="text-lg font-semibold text-gray-700">3. 自定义编辑指令（可选，留空使用预设）</h3>
+                <textarea
+                  value={ugcCustomPrompt}
+                  onChange={e => setUGCCustomPrompt(e.target.value)}
+                  placeholder="描述对图片的修改，例如：保持面部不变，将服装换成奶白色亚麻衬衫，添加金色叠戴项链..."
+                  rows={4}
+                  className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-700 focus:border-purple-400 focus:outline-none focus:ring-1 focus:ring-purple-300 resize-none"
+                />
+              </div>
+
+              {/* Generate button */}
+              <button
+                onClick={handleUGCGeneration}
+                disabled={ugcGenerating || ugcRefUploading || !ugcRefUploadedUrl}
+                className={`inline-flex items-center justify-center gap-3 rounded-xl px-6 py-3 font-semibold text-white transition ${
+                  ugcGenerating || ugcRefUploading || !ugcRefUploadedUrl
+                    ? 'bg-purple-300 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-purple-600 to-blue-500 hover:from-purple-500 hover:to-blue-400 shadow-lg'
+                }`}
+              >
+                {ugcGenerating ? (
+                  <>
+                    <span className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                    <span>生成中...</span>
+                  </>
+                ) : (
+                  '生成 UGC 模特图'
+                )}
+              </button>
+
+              {/* Status */}
+              {ugcGenerating && (
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 flex items-center gap-4">
+                  <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-500 border-t-transparent" />
+                  <div>
+                    <p className="text-blue-900 font-semibold">{ugcStatus || '正在生成，请稍候...'}</p>
+                    {ugcTaskId && <p className="text-sm text-blue-700 mt-1">任务 ID：{ugcTaskId}</p>}
+                  </div>
+                </div>
+              )}
+
+              {!ugcGenerating && ugcStatus && !ugcImageUrl && (
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-sm text-gray-700">
+                  <p>{ugcStatus}</p>
+                  {ugcTaskId && <p className="text-xs text-gray-500 mt-1">任务 ID：{ugcTaskId}</p>}
+                </div>
+              )}
+
+              {/* Result */}
+              {ugcImageUrl && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">✅</span>
+                    <h3 className="text-xl font-semibold text-gray-800">生成结果</h3>
+                  </div>
+                  <div className="relative w-full max-w-xs mx-auto aspect-[9/16] bg-gray-100 rounded-2xl overflow-hidden">
+                    <Image
+                      src={ugcImageUrl}
+                      alt="UGC 模特结果"
+                      fill
+                      className="object-contain"
+                      unoptimized
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <a
+                      href={`/api/download?url=${encodeURIComponent(ugcImageUrl)}&filename=ugc-model-${ugcPreset}.png`}
+                      className="inline-flex items-center gap-2 rounded-xl bg-purple-600 text-white px-5 py-2.5 font-semibold shadow hover:bg-purple-500 transition"
+                    >
+                      下载图片
+                    </a>
+                    <a
+                      href={ugcImageUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-5 py-2.5 font-semibold text-gray-700 hover:border-purple-400 transition"
+                    >
+                      在新标签页打开
+                    </a>
+                    <button
+                      onClick={() => { setUGCImageUrl(null); setUGCStatus(''); setUGCTaskId(null); }}
+                      className="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-5 py-2.5 font-semibold text-gray-700 hover:border-red-400 hover:text-red-600 transition"
+                    >
+                      重新生成
+                    </button>
                   </div>
                 </div>
               )}
