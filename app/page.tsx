@@ -55,13 +55,48 @@ type GeneratedImage = {
 type ModelGender = 'female' | 'male';
 
 const MODEL_GENERATION_PROMPTS: Record<ModelGender, string> = {
-  female: '25 岁东亚女生，淡妆，微笑，白色背景，竖构图，全身模特照，高清，手机自拍挡住脸，佩戴纯白色医用外科口罩（一次性三层无纺布口罩，纯白色无任何图案，有金属鼻夹条，白色耳挂绳，标准医用口罩样式），适合时尚穿搭展示。',
-  male: '28 岁东亚男生，干净短发，微笑，白色背景，竖构图，全身模特照，高清，手机自拍挡住脸，佩戴纯白色医用外科口罩（一次性三层无纺布口罩，纯白色无任何图案，有金属鼻夹条，白色耳挂绳，标准医用口罩样式），适合时尚穿搭展示。'
+  female: [
+    // 角色
+    '25岁东亚女性时尚模特，身材修长匀称，',
+    // 面部细节（NanoBanana 设计蓝图）
+    '细腻毛孔质感的水润透明白皙肌肤，太阳穴和颧骨处自然微微泛粉的血色，',
+    '精致发丝纹理的柔和弧形眉毛，温暖棕色虹彩的大双眼皮眼睛带有玻璃般湿润光泽，',
+    '上眼睑从内眼角到外眼角均匀分布的双重眼神光，睫毛根部沿线自然阴影，纤细分离的自然睫毛，',
+    '柔和粉米色唇彩带有细腻唇部纹理，',
+    // 发型
+    '乌黑亮丽的直发半扎发型，',
+    // 服装
+    '白色无图案短袖圆领T恤，',
+    // 姿态
+    '全身站立模特姿势，自然微笑，单手轻放腰侧，',
+    // 场景与光线
+    '纯白色背景，柔和的摄影棚补光，均匀无阴影打光，',
+    // 相机与照片风格
+    '竖构图，眼平视角，高清专业时尚摄影，适合电商穿搭展示，宽高比3:4'
+  ].join(''),
+  male: [
+    // 角色
+    '28岁东亚男性时尚模特，身材挺拔，',
+    // 面部细节（NanoBanana 设计蓝图）
+    '健康自然的小麦色肌肤，轮廓分明的下颌线，',
+    '浓密但修饰整齐的自然眉毛，深棕色虹彩的明亮双眼带有清晰眼神光，',
+    '自然色唇部，唇线清晰，',
+    // 发型
+    '干净利落的黑色短发，',
+    // 服装
+    '白色无图案短袖圆领T恤，',
+    // 姿态
+    '全身站立模特姿势，自然微笑，双手自然下垂，',
+    // 场景与光线
+    '纯白色背景，柔和的摄影棚补光，均匀无阴影打光，',
+    // 相机与照片风格
+    '竖构图，眼平视角，高清专业时尚摄影，适合电商穿搭展示，宽高比3:4'
+  ].join('')
 };
 
 const MODEL_STYLE_MAP = {
-  female: ['甜酷风', 'OL风', '韩风', '人鱼风', '微胖风'],
-  male: ['商务绅士', '街头潮酷', '运动风', '复古绅士', '韩系男友']
+  female: ['甜酷风', 'OL风', '韩风', '人鱼风', '微胖风', '清冷高级感', '日系软萌'],
+  male: ['商务绅士', '街头潮酷', '运动风', '复古绅士', '韩系男友', '高级质感', '日系清爽']
 } as const;
 
 type ModelStyle = (typeof MODEL_STYLE_MAP)[ModelGender][number];
@@ -79,6 +114,52 @@ const UGC_PRESET_LABELS: Record<UGCPreset, string> = {
   hook:   'Slide 1 — Hook（错误珠宝）',
   result: 'Slide 4 — Result（正确珠宝 golden hour）',
 };
+
+// 预设模特姿势库 - 从真实拍摄参考图分析提取
+const PRESET_POSE_CATEGORIES = [
+  {
+    name: '站立自拍系列',
+    poses: [
+      '姿势：模特正面站立，双手持手机在胸前自拍，双腿自然并拢微交叉，单肩斜挎包，面部微低看向手机屏幕 - 重点展示：上装正面完整图案和阔腿裤的自然垂坠感',
+      '姿势：模特正面站立，一手叉腰，另一手持手机自拍，身体微微扭转呈轻微S型，双腿分开与肩同宽 - 重点展示：上装修身版型和腰线轮廓',
+      '姿势：模特正面站立微侧身，一手插裤袋，另一手持手机，单肩背包，重心落在一条腿上，另一条腿微屈 - 重点展示：裤子口袋设计和整体休闲搭配效果',
+      '姿势：模特正面站立，微微低头看手机，一手持手机另一手自然下垂持小包或配饰，双腿自然站立 - 重点展示：上装领口设计和整体色系搭配',
+    ]
+  },
+  {
+    name: '动感活力系列',
+    poses: [
+      '姿势：模特站立，一手高举过头伸展，身体微微侧倾，另一手持手机自拍，双腿交叉站立，充满活力感 - 重点展示：上衣的修身拉伸效果和腰部线条设计',
+      '姿势：模特站立，一手提包自然下垂，一条腿向后踢起弯曲，身体微前倾，表情俏皮 - 重点展示：阔腿裤裤管的动态摆动效果和整体搭配活力感',
+      '姿势：模特站立，一手拉裤腰或衬衫下摆，另一手肩上挎包，一条腿微弯抬起，身体有韵律感 - 重点展示：衣摆与裤腰的层叠设计和面料质感',
+      '姿势：模特站立，一手高举手机从高角度自拍，另一手叉腰，身体微侧转，表情生动 - 重点展示：上衣正面修身效果和肩线设计',
+    ]
+  },
+  {
+    name: '蹲姿系列',
+    poses: [
+      '姿势：模特双膝弯曲蹲下，一手自然搭在膝盖上，另一手持手机自拍，身体微微前倾，面部微嘟嘴 - 重点展示：裤子面料的褶皱纹理和阔腿裤蹲姿下的面料堆叠效果',
+      '姿势：模特半蹲姿势，一手拉肩上背包带，身体微微前倾，俯拍视角，表情可爱 - 重点展示：上装领口和肩部设计，以及背包搭配效果',
+    ]
+  },
+  {
+    name: '坐姿系列',
+    poses: [
+      '姿势：模特盘腿坐在地上，一手叉腰，另一手持手机仰角自拍，身体挺直，表情酷飒 - 重点展示：上装完整正面图案和裤子面料自然堆叠效果',
+      '姿势：模特坐在地板上，双腿自然弯曲侧放，一手拿饮品，另一手持手机自拍，姿态慵懒 - 重点展示：上衣纽扣细节和裤子面料质感',
+      '姿势：模特坐在地板上，双腿自然伸展向前，一手撑地，另一手持手机，身体微侧 - 重点展示：裤子整体版型和上装休闲穿着效果',
+      '姿势：模特侧坐地板，一手扶帽子或头发，腿向一侧伸展，另一手持手机自拍，姿态优雅 - 重点展示：上衣修身版型和下装宽松裤型的对比效果',
+    ]
+  },
+  {
+    name: '叉腰展示系列',
+    poses: [
+      '姿势：模特正面站立，一手叉腰，身体微扭呈S型，轻微低头，另一手自然持手机，双腿微分 - 重点展示：上装贴身效果与阔腿裤的松紧对比',
+      '姿势：模特站立，双手自然交叠在胸前，微微低头，表情自然，双腿并拢 - 重点展示：上衣面料贴合感和袖子设计细节',
+      '姿势：模特站立，一手插牛仔裤口袋，另一手自然挎包下垂，身体重心微偏一侧，表情随性 - 重点展示：牛仔裤口袋设计和上衣下摆露腰效果',
+    ]
+  },
+];
 
 interface ScenePoseSuggestion {
   scene: string;
@@ -141,6 +222,7 @@ export default function Home() {
   const [modelWearingMask, setModelWearingMask] = useState(false);
   const [modelPoseUseProModel, setModelPoseUseProModel] = useState(false);
   const [modelPoseAutoEnhance, setModelPoseAutoEnhance] = useState(true);
+  const [showPresetPoses, setShowPresetPoses] = useState(false);
 
   // Outfit-Change-V2 tab states - 批量处理
   const [outfitV2OriginalFiles, setOutfitV2OriginalFiles] = useState<File[]>([]);
@@ -1178,6 +1260,57 @@ export default function Home() {
     setModelPoseGeneratedImages([]);
   };
 
+  // 添加预设姿势到当前姿势列表
+  const addPresetPoses = (poses: string[]) => {
+    setModelPoseAnalysis(prev => {
+      if (prev) {
+        // 追加到已有列表，去重
+        const existingPoses = new Set(prev.poses);
+        const newPoses = poses.filter(p => !existingPoses.has(p));
+        return {
+          ...prev,
+          poses: [...prev.poses, ...newPoses],
+        };
+      } else {
+        // 没有AI分析结果时，直接创建
+        return {
+          description: '使用预设姿势库',
+          poses: [...poses],
+        };
+      }
+    });
+    setShowPresetPoses(false);
+  };
+
+  // 添加单个预设姿势
+  const addSinglePresetPose = (pose: string) => {
+    setModelPoseAnalysis(prev => {
+      if (prev) {
+        if (prev.poses.includes(pose)) return prev;
+        return {
+          ...prev,
+          poses: [...prev.poses, pose],
+        };
+      } else {
+        return {
+          description: '使用预设姿势库',
+          poses: [pose],
+        };
+      }
+    });
+  };
+
+  // 添加整个分类的预设姿势
+  const addPresetCategory = (categoryIndex: number) => {
+    addPresetPoses(PRESET_POSE_CATEGORIES[categoryIndex].poses);
+  };
+
+  // 添加全部预设姿势
+  const addAllPresetPoses = () => {
+    const allPoses = PRESET_POSE_CATEGORIES.flatMap(c => c.poses);
+    addPresetPoses(allPoses);
+  };
+
   // 切换姿势选择状态
   const togglePoseSelection = (index: number) => {
     setSelectedPoseIndices(prev => {
@@ -1206,9 +1339,28 @@ export default function Home() {
       return;
     }
 
-    if (!modelPoseUploadedUrl) {
-      setModelPoseError('图片未上传');
-      return;
+    // 如果使用预设姿势库但图片尚未上传，先上传图片
+    let uploadedUrl = modelPoseUploadedUrl;
+    if (!uploadedUrl) {
+      if (!modelPoseFile) {
+        setModelPoseError('请先上传一张服装图片');
+        return;
+      }
+      try {
+        const formData = new FormData();
+        formData.append('files', modelPoseFile);
+        const uploadResponse = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+        if (!uploadResponse.ok) throw new Error('图片上传失败');
+        const uploadData = await uploadResponse.json();
+        uploadedUrl = uploadData.uploaded[0].url;
+        setModelPoseUploadedUrl(uploadedUrl);
+      } catch (error) {
+        setModelPoseError('图片上传失败，请重试');
+        return;
+      }
     }
 
     setModelPoseGenerating(true);
@@ -1236,7 +1388,7 @@ export default function Home() {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              originalImageUrl: modelPoseUploadedUrl,
+              originalImageUrl: uploadedUrl,
               pose: selectedPose,
               description: modelPoseAnalysis.description,
               holdingPhone: modelHoldingPhone,
@@ -4059,21 +4211,86 @@ export default function Home() {
                       )}
                     </div>
 
-                    {/* Analyze Button */}
-                    <button
-                      onClick={handleModelPoseAnalyze}
-                      disabled={modelPoseAnalyzing}
-                      className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100"
-                    >
-                      {modelPoseAnalyzing ? (
-                        <div className="flex items-center justify-center gap-3">
-                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                          <span>AI 分析中...</span>
+                    {/* Analyze Button + Preset Pose Library */}
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handleModelPoseAnalyze}
+                        disabled={modelPoseAnalyzing}
+                        className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all transform hover:scale-105 disabled:scale-100"
+                      >
+                        {modelPoseAnalyzing ? (
+                          <div className="flex items-center justify-center gap-3">
+                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                            <span>AI 分析中...</span>
+                          </div>
+                        ) : (
+                          '开始 AI 分析'
+                        )}
+                      </button>
+                      <button
+                        onClick={() => setShowPresetPoses(!showPresetPoses)}
+                        className={`px-6 py-4 font-bold rounded-lg transition-all transform hover:scale-105 ${
+                          showPresetPoses
+                            ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'
+                            : 'bg-gradient-to-r from-amber-100 to-orange-100 text-amber-800 border-2 border-amber-300 hover:from-amber-200 hover:to-orange-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">📚</span>
+                          <span>预设姿势库</span>
                         </div>
-                      ) : (
-                        '开始 AI 分析'
-                      )}
-                    </button>
+                      </button>
+                    </div>
+
+                    {/* Preset Pose Library Panel */}
+                    {showPresetPoses && (
+                      <div className="bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-200 rounded-lg p-5 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-lg font-bold text-amber-900 flex items-center gap-2">
+                            <span className="text-xl">📚</span>
+                            <span>预设姿势库（从真实拍摄参考提取）</span>
+                          </h3>
+                          <button
+                            onClick={addAllPresetPoses}
+                            className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold rounded-lg transition-all text-sm"
+                          >
+                            添加全部姿势
+                          </button>
+                        </div>
+                        <p className="text-sm text-amber-700">
+                          点击分类名称可批量添加该分类所有姿势，或点击单个姿势逐个添加。添加后会出现在下方姿势列表中供选择生成。
+                        </p>
+                        {PRESET_POSE_CATEGORIES.map((category, catIdx) => (
+                          <div key={catIdx} className="space-y-2">
+                            <button
+                              onClick={() => addPresetCategory(catIdx)}
+                              className="flex items-center gap-2 text-amber-900 font-semibold hover:text-orange-700 transition-colors group"
+                            >
+                              <span className="text-base">{
+                                catIdx === 0 ? '📱' : catIdx === 1 ? '💃' : catIdx === 2 ? '🧎' : catIdx === 3 ? '🪑' : '🤳'
+                              }</span>
+                              <span className="group-hover:underline">{category.name}</span>
+                              <span className="text-xs text-amber-600 bg-amber-200 px-2 py-0.5 rounded-full">{category.poses.length} 个</span>
+                              <span className="text-xs text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity">点击批量添加</span>
+                            </button>
+                            <div className="space-y-1.5 ml-7">
+                              {category.poses.map((pose, poseIdx) => (
+                                <button
+                                  key={poseIdx}
+                                  onClick={() => addSinglePresetPose(pose)}
+                                  className="w-full text-left p-3 bg-white/70 hover:bg-white border border-amber-100 hover:border-amber-300 rounded-lg text-sm text-gray-700 transition-all hover:shadow-sm group"
+                                >
+                                  <div className="flex items-start gap-2">
+                                    <span className="text-amber-400 group-hover:text-amber-600 flex-shrink-0 mt-0.5">+</span>
+                                    <span className="leading-relaxed">{pose}</span>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     {/* Error Message */}
                     {modelPoseError && (
@@ -4489,13 +4706,13 @@ export default function Home() {
                 <div>
                   <h2 className="text-2xl font-semibold text-gray-700">模特描述</h2>
                   <p className="text-gray-500 text-sm">
-                    描述模特的年龄、妆容、姿态与背景，示例已为你填入，可按需微调。
+                    基于 NanoBanana 设计蓝图模板：角色 → 面部细节 → 发型 → 服装 → 姿态 → 场景光线 → 相机风格。描述越精细，生成效果越接近目标。
                   </p>
                 </div>
                 <textarea
                   value={modelGenerationPrompt}
                   onChange={(event) => setModelGenerationPrompt(event.target.value)}
-                  rows={3}
+                  rows={6}
                   className="w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-4 py-3 text-gray-800 focus:border-purple-500 focus:bg-white focus:outline-none transition"
                   placeholder={MODEL_GENERATION_PROMPTS[modelGenerationGender]}
                 />

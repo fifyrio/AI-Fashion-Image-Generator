@@ -25,6 +25,29 @@ export class OutfitFormulaMatcher {
    * 匹配最佳公式
    */
   match(topAnalysis: TopGarmentAnalysis): FormulaMatchResult {
+    // 检查是否为一件式服装（裙子、连衣裙等），这类服装不需要下装推荐
+    const onePieceGarmentKeywords = [
+      '裙子', '连衣裙', 'dress', 'skirt', '长裙', '短裙',
+      '半身裙', '背心裙', '吊带裙', 'midi dress', 'maxi dress',
+      'mini dress', 'a-line skirt', 'pencil skirt'
+    ];
+
+    const isOnePieceGarment = onePieceGarmentKeywords.some(keyword =>
+      topAnalysis.type.toLowerCase().includes(keyword.toLowerCase())
+    );
+
+    // 如果是一件式服装，创建一个特殊的匹配结果
+    if (isOnePieceGarment) {
+      console.log('🔔 Detected one-piece garment (dress/skirt), skipping bottom recommendation');
+      // 返回第一个公式作为占位，但标记为跳过下装推荐
+      return {
+        matchedFormula: this.formulas[0],
+        score: 0,
+        confidence: 'high',
+        skipBottomRecommendation: true
+      };
+    }
+
     const scores: ScoredFormula[] = this.formulas.map(formula => ({
       formula,
       score: this.calculateScore(formula, topAnalysis)
@@ -210,20 +233,20 @@ export class OutfitFormulaMatcher {
         weights: { typeMatch: 40, lengthMatch: 25, styleMatch: 25, colorMatch: 10 }
       },
 
-      // 公式四：紧身罗纹针织衫 + 浅色瑜伽裤
+      // 公式四：紧身罗纹针织衫 + 瑜伽裤/修身牛仔裤
       {
         id: 'formula-4',
-        name: '紧身罗纹针织衫 + 浅色瑜伽裤',
+        name: '紧身罗纹针织衫 + 瑜伽裤/修身牛仔裤',
         topRules: {
           types: ['针织衫', 'knit', 'sweater', '罗纹针织', 'ribbed knit', '毛衣', '打底衫'],
           lengths: ['常规', 'regular', '短款', 'cropped', '修身'],
           styles: ['休闲', 'casual', '运动', 'sporty', 'athleisure', '简约', '基础款']
         },
         bottomRecommendation: {
-          types: ['瑜伽裤', 'yoga pants', '运动裤', 'athletic pants', 'leggings', '健身裤'],
-          colors: ['浅灰', 'light grey', '莫兰迪色', 'muted tones', '米色', 'beige', '奶白'],
-          fits: ['修身', 'fitted', '紧身', 'tight'],
-          materials: ['弹力面料', 'stretch', '速干面料']
+          types: ['瑜伽裤', 'yoga pants', '运动裤', 'athletic pants', 'leggings', '健身裤', '修身牛仔裤', 'slim jeans', '紧身牛仔裤', 'skinny jeans'],
+          colors: ['浅灰', 'light grey', '莫兰迪色', 'muted tones', '米色', 'beige', '奶白', '深蓝', 'dark blue', '黑色', 'black'],
+          fits: ['修身', 'fitted', '紧身', 'tight', 'skinny'],
+          materials: ['弹力面料', 'stretch', '速干面料', '弹力牛仔', 'denim']
         },
         // 运动风格不推荐腰带，只推荐运动配饰
         accessoriesRecommendation: ['简约运动手表', '运动发带', '小巧耳钉'],

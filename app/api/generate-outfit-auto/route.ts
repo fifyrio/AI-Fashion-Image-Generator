@@ -132,6 +132,16 @@ function buildEnhancedDescription(originalDescription: string, matchingSuggestio
         }
     }
 
+    // Filter out belt/腰带 if bottoms are leggings-type (no belt loops)
+    const noBeltBottoms = ['leggings', '紧身裤', '瑜伽裤', '鲨鱼裤', '打底裤', '运动裤', 'yoga pants', '健身裤'];
+    const isLeggingsBottom = noBeltBottoms.some(kw => bottomsInfo.toLowerCase().includes(kw));
+    if (isLeggingsBottom && accessoriesInfo) {
+        accessoriesInfo = accessoriesInfo
+            .split('; ')
+            .filter(item => !item.includes('腰带') && !item.includes('皮带') && !item.toLowerCase().includes('belt'))
+            .join('; ');
+    }
+
     // Extract top style info for strict preservation
     const topStyle = extractTopStyleInfo(originalDescription);
 
@@ -158,6 +168,13 @@ ${bottomsInfo.trim()}`;
         enhanced += `\n\nACCESSORIES (AI recommendation):
 ${accessoriesInfo.trim()}`;
     }
+
+    // Add trending style guidance for better visual appeal
+    enhanced += `\n\n🔥 TRENDING STYLE TIPS (for maximum visual appeal):
+- Use DARK tones for bottoms (black, dark grey) to create strong contrast with the top
+- Ensure the overall outfit has a clear style identity (street/sporty, earth-tone luxe, military cool, or layered casual)
+- The silhouette should have clear contrast - if top is loose, bottoms should be fitted; if top is fitted, consider wide-leg or straight-cut bottoms
+- Avoid overly plain or low-contrast combinations`;
 
     // Add final reminder
     enhanced += `\n\n⚠️ REMINDER: The TOP/JACKET must match the uploaded clothing image EXACTLY in terms of length, style, and silhouette. DO NOT transform a short jacket into a long one or vice versa.`;

@@ -227,6 +227,7 @@ export interface FormulaMatchResult {
     score: number;
     confidence: 'high' | 'low';
     fallback?: boolean;
+    skipBottomRecommendation?: boolean; // 如果是一件式服装（裙子/连衣裙），跳过下装推荐
 }
 
 // 下装推荐
