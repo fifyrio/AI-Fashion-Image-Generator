@@ -127,8 +127,9 @@ export class OutfitFormulaMatcher {
       return 0;
     }
 
-    // 类型匹配
-    if (this.matchesAny(analysis.type, topRules.types)) {
+    // 类型匹配（核心维度）
+    const typeMatched = this.matchesAny(analysis.type, topRules.types);
+    if (typeMatched) {
       score += weights.typeMatch;
     }
 
@@ -140,6 +141,12 @@ export class OutfitFormulaMatcher {
     // 风格匹配
     if (this.matchesAny(analysis.style, topRules.styles)) {
       score += weights.styleMatch;
+    }
+
+    // 类型不匹配时大幅惩罚：类型是最核心的匹配维度，
+    // 仅靠风格+长度匹配不应该赢过类型匹配的公式
+    if (!typeMatched) {
+      score = Math.floor(score * 0.3);
     }
 
     return score;
@@ -300,6 +307,107 @@ export class OutfitFormulaMatcher {
         principle: '上下协调，干练利落，拉长比例',
         styleEffect: '职业、干练、气场强',
         weights: { typeMatch: 40, lengthMatch: 20, styleMatch: 30, colorMatch: 10 }
+      },
+
+      // 公式七：黑色修身吊带/背心 + 黑色短裙/高腰裤（全黑修身辣妹风 - 5439赞最高）
+      {
+        id: 'formula-7',
+        name: '黑色修身吊带/背心 + 黑色短裙/高腰裤',
+        topRules: {
+          types: ['吊带', '背心', 'tank top', 'camisole', 'vest top', '吊带背心', '抹胸', 'tube top', 'crop top'],
+          lengths: ['短款', 'short', 'cropped', '常规', 'regular'],
+          styles: ['性感', 'sexy', '辣妹', 'hot girl', '简约', 'minimal', '修身', '紧身']
+        },
+        bottomRecommendation: {
+          types: ['黑色短裙', '高腰短裙', '包臀裙', 'mini skirt', '黑色高腰裤', '黑色紧身裤', '黑色小脚裤'],
+          colors: ['黑色', 'black'],
+          fits: ['修身', 'fitted', '紧身', 'tight', '高腰', 'high waist'],
+          materials: ['弹力面料', '针织', '皮质', 'PU皮']
+        },
+        principle: '全黑修身mono look，通过材质和剪裁制造层次感，高腰线拉长比例',
+        styleEffect: '辣妹风、显瘦、简约高级、微胖友好',
+        weights: { typeMatch: 40, lengthMatch: 20, styleMatch: 30, colorMatch: 10 }
+      },
+
+      // 公式八：黑色紧身上衣 + 蓝色修身牛仔裤（最稳高赞公式 - 4879+4441赞）
+      {
+        id: 'formula-8',
+        name: '黑色紧身上衣 + 蓝色修身牛仔裤',
+        topRules: {
+          types: ['打底衫', '紧身T恤', 'fitted tee', '修身T恤', '长袖T恤', '紧身上衣', 'bodycon top', '修身针织', 'slim knit', '基础款上衣', 'basic top'],
+          lengths: ['短款', 'short', 'cropped', '常规', 'regular'],
+          styles: ['基础', 'basic', '简约', 'minimal', '日常', 'daily', '百搭', 'versatile', '休闲', 'casual']
+        },
+        bottomRecommendation: {
+          types: ['修身牛仔裤', 'slim jeans', '直筒牛仔裤', 'straight jeans', '紧身牛仔裤', 'skinny jeans', '小脚牛仔裤'],
+          colors: ['蓝色', 'blue', '深蓝', 'dark blue', '中蓝', 'medium blue', '浅蓝', 'light blue'],
+          fits: ['修身', 'fitted', '直筒', 'straight', '紧身', 'skinny'],
+          materials: ['牛仔布', 'denim', '弹力牛仔']
+        },
+        principle: '极简配色黑上蓝下，紧身上衣突出身材线条，修身牛仔裤显腿长',
+        styleEffect: '百搭经典、显瘦、微胖友好、日常实穿',
+        weights: { typeMatch: 30, lengthMatch: 20, styleMatch: 35, colorMatch: 15 }
+      },
+
+      // 公式九：白色宽松衬衫 + 修身牛仔裤（清爽知性风 - 3907赞）
+      {
+        id: 'formula-9',
+        name: '白色宽松衬衫 + 修身牛仔裤',
+        topRules: {
+          types: ['衬衫', 'shirt', 'blouse', '白衬衫', 'white shirt', '宽松衬衫', 'oversized shirt'],
+          lengths: ['常规', 'regular', '中长', 'medium', '短款', 'short'],
+          styles: ['知性', 'intellectual', '清爽', 'fresh', '简约', 'minimal', '文艺', 'literary', '通勤', 'office casual', '休闲', 'casual', '日常', 'daily', '百搭', 'versatile'],
+          excludeTypes: ['西装', 'blazer', 'suit']
+        },
+        bottomRecommendation: {
+          types: ['修身牛仔裤', 'slim jeans', '直筒牛仔裤', 'straight jeans', '紧身牛仔裤', 'skinny jeans'],
+          colors: ['蓝色', 'blue', '深蓝', 'dark blue', '浅蓝', 'light blue', '中蓝', 'medium blue'],
+          fits: ['修身', 'fitted', '直筒', 'straight', '紧身', 'skinny'],
+          materials: ['牛仔布', 'denim', '弹力牛仔']
+        },
+        principle: '上松下紧经典廓形，白色衬衫清爽干净，修身牛仔裤显腿型，微塞衣角增加随性感',
+        styleEffect: '清爽知性、上松下紧、干净利落',
+        weights: { typeMatch: 35, lengthMatch: 20, styleMatch: 30, colorMatch: 15 }
+      },
+
+      // 公式十：暖色紧身针织 + 修身牛仔裤（温柔风 - 3295+2700赞）
+      {
+        id: 'formula-10',
+        name: '暖色紧身针织 + 修身牛仔裤',
+        topRules: {
+          types: ['针织衫', 'knit', 'sweater', '毛衣', '套头衫', 'pullover', '薄毛衣', 'knit top'],
+          lengths: ['短款', 'short', 'cropped', '常规', 'regular'],
+          styles: ['温柔', 'gentle', 'soft', '甜美', 'sweet', '秋冬', 'autumn', '质感', 'textured', '优雅', 'elegant']
+        },
+        bottomRecommendation: {
+          types: ['修身牛仔裤', 'slim jeans', '直筒牛仔裤', 'straight jeans', '紧身牛仔裤', 'skinny jeans'],
+          colors: ['蓝色', 'blue', '深蓝', 'dark blue', '浅蓝', 'light blue'],
+          fits: ['修身', 'fitted', '直筒', 'straight', '紧身', 'skinny'],
+          materials: ['牛仔布', 'denim', '弹力牛仔']
+        },
+        principle: '暖色调针织衫温柔质感搭配修身牛仔裤，暖冷色对比柔和高级，紧身针织突出身材线条',
+        styleEffect: '温柔质感、秋冬氛围、显瘦百搭',
+        weights: { typeMatch: 35, lengthMatch: 20, styleMatch: 30, colorMatch: 15 }
+      },
+
+      // 公式十一：酒红/深红色上装 + 修身牛仔裤/深色裤（微醺风 - 2000+赞）
+      {
+        id: 'formula-11',
+        name: '酒红色上装 + 修身牛仔裤',
+        topRules: {
+          types: ['针织衫', 'knit', '毛衣', 'sweater', '衬衫', 'shirt', '打底衫', 'base layer', 'T恤', 'tee', '上衣', 'top'],
+          lengths: ['短款', 'short', '常规', 'regular'],
+          styles: ['气质', 'classy', '高级', 'sophisticated', '复古', 'retro', '成熟', 'mature', '优雅', 'elegant']
+        },
+        bottomRecommendation: {
+          types: ['修身牛仔裤', 'slim jeans', '紧身牛仔裤', 'skinny jeans', '黑色修身裤', '深色紧身裤', '直筒牛仔裤', 'straight jeans'],
+          colors: ['深蓝', 'dark blue', '蓝色', 'blue', '黑色', 'black', '深灰', 'charcoal'],
+          fits: ['修身', 'fitted', '紧身', 'skinny', '直筒', 'straight'],
+          materials: ['牛仔布', 'denim', '弹力面料']
+        },
+        principle: '酒红色显白提气色，饱和度高但不突兀，搭配修身牛仔裤或深色裤平衡色彩',
+        styleEffect: '微醺气质、显白、秋冬氛围感、高级感',
+        weights: { typeMatch: 25, lengthMatch: 15, styleMatch: 35, colorMatch: 25 }
       }
     ];
   }
