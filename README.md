@@ -93,3 +93,6 @@ npm run test-copywriting # 测试文案生成功能
 ## License
 
 
+https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/emma_white/frame_1.jpg
+
+https://pub-9e76573778404f65b02c3ea29d2db5f9.r2.dev/Aya_home/frame_1.jpg
